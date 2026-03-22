@@ -34,40 +34,42 @@ export default function AddParticipantModal({
 }: AddParticipantModalProps) {
   const { width } = Dimensions.get('window');
   const isSmallScreen = width < 375;
-  const { accessToken } = useAuth();
+  const { authorizedFetch } = useAuth();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [addingParticipant, setAddingParticipant] = useState<number | null>(null);
 
+  const parseUserList = (payload: unknown): User[] => {
+    if (Array.isArray(payload)) return payload;
+    if (payload && typeof payload === 'object' && 'content' in payload) {
+      const c = (payload as { content?: unknown }).content;
+      return Array.isArray(c) ? c : [];
+    }
+    return [];
+  };
+
   const searchUsers = useCallback(async (query: string) => {
-    if (!accessToken || query.length < 2) {
+    if (query.length < 2) {
       setUsers([]);
       return;
     }
 
     setLoading(true);
     try {
-      const response = await fetch(
-        `${API_ENDPOINTS.USERS.SEARCH}?q=${encodeURIComponent(query)}&page=1&limit=20`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-        }
+      const response = await authorizedFetch(
+        `${API_ENDPOINTS.USERS.SEARCH}?q=${encodeURIComponent(query)}&page=0&size=20`
       );
 
       if (!response.ok) {
         throw new Error('Nie udało się wyszukać użytkowników');
       }
 
-      const data = await response.json();
-      // Filtruj użytkowników, którzy już są uczestnikami
-      const currentParticipantIds = currentParticipants.map(p => p.id);
-      const filteredData = data.filter((user: User) => !currentParticipantIds.includes(user.id));
+      const raw = await response.json();
+      const list = parseUserList(raw);
+      const currentParticipantIds = currentParticipants.map((p) => p.id);
+      const filteredData = list.filter((user: User) => !currentParticipantIds.includes(user.id));
       setUsers(filteredData);
     } catch (error) {
       console.error('Error searching users:', error);
@@ -75,7 +77,7 @@ export default function AddParticipantModal({
     } finally {
       setLoading(false);
     }
-  }, [accessToken, currentParticipants]);
+  }, [authorizedFetch, currentParticipants]);
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -90,16 +92,12 @@ export default function AddParticipantModal({
   }, [searchQuery, searchUsers]);
 
   const handleAddParticipant = async (userId: number) => {
-    if (!accessToken || addingParticipant === userId) return;
+    if (addingParticipant === userId) return;
 
     setAddingParticipant(userId);
     try {
-      const response = await fetch(API_ENDPOINTS.EVENTS.ADD_PARTICIPANT(eventId, userId), {
+      const response = await authorizedFetch(API_ENDPOINTS.EVENTS.ADD_PARTICIPANT(eventId, userId), {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
       });
 
       if (!response.ok) {

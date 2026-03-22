@@ -6,12 +6,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/context/AuthContext';
 import { API_ENDPOINTS } from '@/urls/api';
 import { API_BASE_URL } from '@/urls/urls';
+import { SearchUser, useSearchUsers } from '@/hooks/users/useSearchUsers';
 
-interface User {
-  id: number;
-  username: string;
-  email: string;
-}
+type User = SearchUser;
 
 interface FriendshipStatus {
   status: 'none' | 'pending' | 'accepted' | 'rejected';
@@ -30,10 +27,7 @@ export default function SearchUsers({ onSendRequest }: SearchUsersProps) {
   const { accessToken } = useAuth();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
+  const { users, loading, hasMore, search, loadMore: loadMoreUsers, clear } = useSearchUsers();
   const [sendingRequest, setSendingRequest] = useState<number | null>(null);
   const [friendshipStatuses, setFriendshipStatuses] = useState<Record<number, FriendshipStatus>>({});
 
@@ -53,67 +47,31 @@ export default function SearchUsers({ onSendRequest }: SearchUsersProps) {
     },
   ];
 
-  const searchUsers = useCallback(async (query: string, pageNum: number = 1, append: boolean = false) => {
-    if (!accessToken || query.length < 2) {
-      if (!append) setUsers([]);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const response = await fetch(
-        `${API_ENDPOINTS.USERS.SEARCH}?q=${encodeURIComponent(query)}&page=${pageNum}&limit=20`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Nie udało się wyszukać użytkowników');
-      }
-
-      const data = await response.json();
-      if (append) {
-        setUsers(prev => [...prev, ...data]);
-      } else {
-        setUsers(data);
-      }
-      setHasMore(data.length === 20);
-
-      data.forEach((user: User) => {
-        checkFriendshipStatus(user.id);
-      });
-    } catch (error) {
-      console.error('Error searching users:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [accessToken]);
-
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       if (searchQuery.length >= 2) {
-        setPage(1);
-        searchUsers(searchQuery, 1, false);
+        search(searchQuery, 0, false);
       } else {
-        setUsers([]);
+        clear();
       }
     }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [searchQuery, searchUsers]);
+  }, [searchQuery, search, clear]);
 
-  const loadMore = useCallback(() => {
+  useEffect(() => {
+    users.forEach((user) => {
+      if (!friendshipStatuses[user.id]) {
+        checkFriendshipStatus(user.id);
+      }
+    });
+  }, [users, friendshipStatuses]);
+
+  const handleLoadMore = useCallback(() => {
     if (!loading && hasMore && searchQuery.length >= 2) {
-      const nextPage = page + 1;
-      setPage(nextPage);
-      searchUsers(searchQuery, nextPage, true);
+      loadMoreUsers(searchQuery);
     }
-  }, [loading, hasMore, page, searchQuery, searchUsers]);
+  }, [loading, hasMore, searchQuery, loadMoreUsers]);
 
   const checkFriendshipStatus = async (userId: number) => {
     if (!accessToken) return;
@@ -304,7 +262,7 @@ export default function SearchUsers({ onSendRequest }: SearchUsersProps) {
                 style={styles.clearButton}
                 onPress={() => {
                   setSearchQuery('');
-                  setUsers([]);
+                    clear();
                 }}
               >
                 <Ionicons name="close-circle" size={isSmallScreen ? 18 : 20} color="#6B7280" />
@@ -340,7 +298,7 @@ export default function SearchUsers({ onSendRequest }: SearchUsersProps) {
             renderItem={renderUserItem}
             contentContainerStyle={styles.usersList}
             showsVerticalScrollIndicator={false}
-            onEndReached={loadMore}
+            onEndReached={handleLoadMore}
             onEndReachedThreshold={0.5}
             ListFooterComponent={
               loading && users.length > 0 ? (

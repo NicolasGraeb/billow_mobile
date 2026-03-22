@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { isEventFinished } from '@/utils/eventStatus';
 
 interface Event {
   id: number;
@@ -84,7 +85,7 @@ export default function EventCard({ event }: EventCardProps) {
               {event.participants?.length || 0} uczestników
             </Text>
           </View>
-          {event.status === 'finished' && (
+          {isEventFinished(event.status) && (
             <View style={styles.statusBadge}>
               <Text style={styles.statusText}>Zakończony</Text>
             </View>

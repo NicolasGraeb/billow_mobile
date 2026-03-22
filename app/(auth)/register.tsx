@@ -1,5 +1,5 @@
 import BackgroundGradient from "@/components/BackgroundGradient";
-import { API_ENDPOINTS } from "@/urls/api";
+import { useRegister } from "@/hooks/auth/useRegister";
 import UserRegister from "@/types/UserRegister";
 import React, { useMemo, useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
@@ -8,9 +8,9 @@ import { useRouter } from "expo-router";
 
 export default function Register() {
     const router = useRouter();
+    const { signUp, loading } = useRegister();
     const [form, setForm] = useState<UserRegister>({confirmPassword: "", username: "", email: "", password: "" });
     const [showPassword, setShowPassword] = useState(false);
-    const [loading, setLoading] = useState(false);
 
     const hasUppercase = useMemo(() => /[A-Z]/.test(form.password), [form.password]);
     const hasSpecial = useMemo(() => /[^A-Za-z0-9]/.test(form.password), [form.password]);
@@ -30,23 +30,12 @@ export default function Register() {
             Alert.alert("Błąd", "Hasło musi mieć min. 6 znaków, 1 wielką literę i 1 znak specjalny");
             return;
         }
-        setLoading(true);
+
         try {
-            const res = await fetch(API_ENDPOINTS.AUTH.REGISTER, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(form),
-            });
-            if (!res.ok) {
-                const data = await res.json().catch(() => ({}));
-                throw new Error(data.detail || `Błąd rejestracji: ${res.status}`);
-            }
-            await res.json().catch(() => ({}));
+            await signUp(form);
             Alert.alert("Sukces", "Konto zostało utworzone", [{ text: "OK", onPress: () => router.push("/login") }]);
         } catch (e: any) {
             Alert.alert("Błąd rejestracji", e.message || "Wystąpił błąd");
-        } finally {
-            setLoading(false);
         }
     };
 

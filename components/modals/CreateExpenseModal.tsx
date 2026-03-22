@@ -37,7 +37,7 @@ export default function CreateExpenseModal({
 }: CreateExpenseModalProps) {
   const { width } = Dimensions.get('window');
   const isSmallScreen = width < 375;
-  const { accessToken } = useAuth();
+  const { authorizedFetch } = useAuth();
 
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -142,14 +142,11 @@ export default function CreateExpenseModal({
       return;
     }
 
-    if (!accessToken) return;
-
     setCreating(true);
     try {
-      const response = await fetch(API_ENDPOINTS.EXPENSES.CREATE, {
+      const response = await authorizedFetch(API_ENDPOINTS.EXPENSES.CREATE, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

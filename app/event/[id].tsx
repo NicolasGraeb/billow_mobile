@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { API_ENDPOINTS } from '@/urls/api';
+import { isEventActive } from '@/utils/eventStatus';
 import CreateExpenseModal from '@/components/modals/CreateExpenseModal';
 import EditExpenseModal from '@/components/modals/EditExpenseModal';
 import AddParticipantModal from '@/components/modals/AddParticipantModal';
@@ -61,7 +62,7 @@ interface Expense {
 export default function EventDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { accessToken, userId } = useAuth();
+  const { authorizedFetch, userId, loading: authLoading } = useAuth();
 
   const [event, setEvent] = useState<Event | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -75,27 +76,17 @@ export default function EventDetail() {
   const [sortBy, setSortBy] = useState<'amount_asc' | 'amount_desc' | 'date_asc' | 'date_desc'>('date_desc');
 
   useEffect(() => {
-    console.log('EventDetail mounted, id:', id, 'accessToken:', !!accessToken);
-    if (id && accessToken) {
-      fetchEvent();
-      fetchExpenses();
-    } else {
-      console.log('Missing id or accessToken:', { id, hasAccessToken: !!accessToken });
-      setLoading(false);
-    }
-  }, [id, accessToken]);
+    if (!id || authLoading) return;
+    fetchEvent();
+    fetchExpenses();
+  }, [id, authLoading]);
 
   const fetchEvent = async () => {
-    if (!accessToken || !id) return;
+    if (!id) return;
 
     setLoading(true);
     try {
-      const response = await fetch(API_ENDPOINTS.EVENTS.GET(parseInt(id)), {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await authorizedFetch(API_ENDPOINTS.EVENTS.GET(parseInt(id, 10)));
 
       if (!response.ok) {
         throw new Error('Nie udało się pobrać eventu');
@@ -112,20 +103,15 @@ export default function EventDetail() {
   };
 
   const fetchExpenses = async () => {
-    if (!accessToken || !id) return;
+    if (!id) return;
 
     setExpensesLoading(true);
     try {
-      const response = await fetch(API_ENDPOINTS.EXPENSES.GET_BY_EVENT(parseInt(id)), {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await authorizedFetch(API_ENDPOINTS.EXPENSES.GET_BY_EVENT(parseInt(id, 10)));
 
       if (response.ok) {
         const data = await response.json();
-        setExpenses(data || []);
+        setExpenses(Array.isArray(data) ? data : []);
       }
     } catch (error) {
       console.error('Error fetching expenses:', error);
@@ -135,7 +121,7 @@ export default function EventDetail() {
   };
 
   const handleFinishEvent = async () => {
-    if (!accessToken || !id) return;
+    if (!id) return;
 
     Alert.alert(
       'Zakończ event',
@@ -147,12 +133,8 @@ export default function EventDetail() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const response = await fetch(API_ENDPOINTS.EVENTS.FINISH(parseInt(id)), {
+              const response = await authorizedFetch(API_ENDPOINTS.EVENTS.FINISH(parseInt(id, 10)), {
                 method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${accessToken}`,
-                  'Content-Type': 'application/json',
-                },
               });
 
               if (response.ok) {
@@ -224,15 +206,15 @@ export default function EventDetail() {
         <EventHeader
           onFinishEvent={handleFinishEvent}
           isCreator={isCreator}
-          isActive={event.status === 'active'}
+          isActive={isEventActive(event.status)}
         />
 
         <EventCard event={event} />
 
-        {event.status === 'active' && (
+        {isEventActive(event.status) && (
           <EventActions
-            onAddExpense={event.status === 'active' ? () => setShowCreateExpenseModal(true) : undefined}
-            onAddParticipant={event.status === 'active' && isCreator ? () => setShowAddParticipantModal(true) : undefined}
+            onAddExpense={isEventActive(event.status) ? () => setShowCreateExpenseModal(true) : undefined}
+            onAddParticipant={isEventActive(event.status) && isCreator ? () => setShowAddParticipantModal(true) : undefined}
             onOpenChat={() => {
               if (id) {
                 router.push(`/event/${id}/chat`);
@@ -249,14 +231,16 @@ export default function EventDetail() {
           sortBy={sortBy}
           onSortChange={setSortBy}
           isCreator={isCreator}
-          isActive={event.status === 'active'}
+          isActive={isEventActive(event.status)}
           onEditExpense={(expense) => {
             setSelectedExpense(expense);
             setShowEditExpenseModal(true);
           }}
         />
 
-        <BalanceButton onPress={() => setShowBalanceModal(true)} />
+        {!expensesLoading && expenses.length > 0 && (
+          <BalanceButton onPress={() => setShowBalanceModal(true)} />
+        )}
       </ScrollView>
 
       {userId !== null && event && (
@@ -286,7 +270,7 @@ export default function EventDetail() {
             expense={selectedExpense}
             participants={event.participants}
             currentUserId={userId}
-            canDelete={Boolean(isCreator && event.status === 'active')}
+            canDelete={Boolean(isCreator && isEventActive(event.status))}
           />
         </>
       )}
@@ -307,6 +291,7 @@ export default function EventDetail() {
             visible={showBalanceModal}
             onClose={() => setShowBalanceModal(false)}
             eventId={event.id}
+            participants={event.participants}
           />
         </>
       )}

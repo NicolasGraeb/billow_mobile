@@ -19,9 +19,7 @@ type EventEndpoints = {
   ADD_PARTICIPANT: (eventId: number, userId: number) => string;
   REMOVE_PARTICIPANT: (eventId: number, userId: number) => string;
   CHAT_MESSAGES: (eventId: number) => string;
-  /** Raw WebSocket (legacy). Prefer CHAT_STOMP_WS for Java backend. */
   CHAT_WEBSOCKET: (eventId: number, token: string) => string;
-  /** STOMP over WebSocket – connect here, then subscribe to /topic/events/{eventId}/chat */
   CHAT_STOMP_WS: (token: string) => string;
 };
 
@@ -65,7 +63,8 @@ export const API_ENDPOINTS: ApiEndpoints = {
   EVENTS: {
     ME: `${API_BASE_URL}/events/me`,
     ACTIVE: `${API_BASE_URL}/events/me/active`,
-    CREATE: `${API_BASE_URL}/events/`,
+    /** Bez końcowego "/" — inaczej Spring robi redirect, a fetch często gubi nagłówek Authorization → 401 Unauthorized */
+    CREATE: `${API_BASE_URL}/events`,
     GET: (eventId: number) => `${API_BASE_URL}/events/${eventId}`,
     FINISH: (eventId: number) => `${API_BASE_URL}/events/${eventId}/finish`,
     ADD_PARTICIPANT: (eventId: number, userId: number) => `${API_BASE_URL}/events/${eventId}/participants/${userId}`,
@@ -75,7 +74,7 @@ export const API_ENDPOINTS: ApiEndpoints = {
     CHAT_STOMP_WS: (token: string) => `${WS_BASE_URL}/ws?token=${encodeURIComponent(token)}`,
   },
   EXPENSES: {
-    CREATE: `${API_BASE_URL}/expenses/`,
+    CREATE: `${API_BASE_URL}/expenses`,
     GET_BY_EVENT: (eventId: number) => `${API_BASE_URL}/expenses/event/${eventId}`,
     UPDATE: (expenseId: number) => `${API_BASE_URL}/expenses/${expenseId}`,
     DELETE: (expenseId: number) => `${API_BASE_URL}/expenses/${expenseId}`,
@@ -85,7 +84,7 @@ export const API_ENDPOINTS: ApiEndpoints = {
     SEARCH: `${API_BASE_URL}/users/search`,
   },
   FRIENDS: {
-    LIST: `${API_BASE_URL}/friends/`,
+    LIST: `${API_BASE_URL}/friends`,
     REQUEST: (friendId: number) => `${API_BASE_URL}/friends/request/${friendId}`,
     PENDING: `${API_BASE_URL}/friends/requests/pending`,
     SENT: `${API_BASE_URL}/friends/requests/sent`,

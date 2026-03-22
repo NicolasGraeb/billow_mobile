@@ -1,29 +1,12 @@
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, FlatList, Dimensions, ActivityIndicator, Alert } from 'react-native';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '@/context/AuthContext';
-import { API_ENDPOINTS } from '@/urls/api';
 import ModalHeader from '@/components/common/ModalHeader';
 import EmptyState from '@/components/common/EmptyState';
 import UserAvatar from '@/components/common/UserAvatar';
 import UserInfo from '@/components/common/UserInfo';
-
-interface Friend {
-  id: number;
-  user_id: number;
-  friend_id: number;
-  status: string;
-  user: {
-    id: number;
-    username: string;
-    email: string;
-  };
-  friend: {
-    id: number;
-    username: string;
-    email: string;
-  };
-}
+import { FriendRelation, useFriendsList } from '@/hooks/friends/useFriendsList';
+import { useCreateEvent } from '@/hooks/events/useCreateEvent';
 
 interface CreateEventModalProps {
   visible: boolean;
@@ -35,48 +18,23 @@ interface CreateEventModalProps {
 export default function CreateEventModal({ visible, onClose, onEventCreated, currentUserId }: CreateEventModalProps) {
   const { width } = Dimensions.get('window');
   const isSmallScreen = width < 375;
-  const { authorizedFetch } = useAuth();
+  const { friends, loading: friendsLoading, fetchFriends } = useFriendsList();
+  const { createEvent, creating } = useCreateEvent();
 
   const [eventName, setEventName] = useState('');
   const [description, setDescription] = useState('');
-  const [friends, setFriends] = useState<Friend[]>([]);
   const [selectedFriends, setSelectedFriends] = useState<Set<number>>(new Set());
-  const [friendsLoading, setFriendsLoading] = useState(false);
-  const [creating, setCreating] = useState(false);
-
-  const fetchFriends = useCallback(async () => {
-    setFriendsLoading(true);
-    try {
-      const response = await authorizedFetch(API_ENDPOINTS.FRIENDS.LIST, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setFriends(data || []);
-      } else if (response.status === 401) {
-        Alert.alert('Błąd', 'Sesja wygasła. Zaloguj się ponownie.');
-      }
-    } catch (error) {
-      console.error('Error fetching friends:', error);
-    } finally {
-      setFriendsLoading(false);
-    }
-  }, [authorizedFetch]);
 
   useEffect(() => {
     if (visible) {
-      fetchFriends();
+      void fetchFriends();
       setEventName('');
       setDescription('');
       setSelectedFriends(new Set());
     }
   }, [visible, fetchFriends]);
 
-  const getFriendUser = (friend: Friend) => {
+  const getFriendUser = (friend: FriendRelation) => {
     if (!currentUserId) {
       return friend.friend || friend.user;
     }
@@ -106,24 +64,19 @@ export default function CreateEventModal({ visible, onClose, onEventCreated, cur
       Alert.alert('Błąd', 'Podaj nazwę eventu');
       return;
     }
-    setCreating(true);
-    try {
-      const response = await authorizedFetch(API_ENDPOINTS.EVENTS.CREATE, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: eventName.trim(),
-          description: description.trim() || null,
-          participant_ids: Array.from(selectedFriends),
-        }),
-      });
 
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ detail: 'Nie udało się utworzyć eventu' }));
-        throw new Error(error.detail || 'Nie udało się utworzyć eventu');
-      }
+    console.log('[CreateEventModal] handleCreate start', {
+      currentUserId,
+      nameLength: eventName.trim().length,
+      selectedFriendsCount: selectedFriends.size,
+    });
+
+    try {
+      await createEvent({
+        name: eventName.trim(),
+        description: description.trim() || null,
+        participant_ids: Array.from(selectedFriends),
+      });
 
       if (onEventCreated) {
         onEventCreated();
@@ -131,12 +84,10 @@ export default function CreateEventModal({ visible, onClose, onEventCreated, cur
       onClose();
     } catch (error: any) {
       Alert.alert('Błąd', error.message || 'Nie udało się utworzyć eventu');
-    } finally {
-      setCreating(false);
     }
   };
 
-  const renderFriendItem = ({ item }: { item: Friend }) => {
+  const renderFriendItem = ({ item }: { item: FriendRelation }) => {
     const friendUser = getFriendUser(item);
     if (!friendUser) return null;
 

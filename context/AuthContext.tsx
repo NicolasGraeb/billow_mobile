@@ -1,6 +1,6 @@
-import { API_ENDPOINTS } from "@/urls/api";
+import {API_ENDPOINTS} from "@/urls/api";
 import * as SecureStore from "expo-secure-store";
-import React, { createContext, ReactNode, useContext, useEffect, useState } from "react";
+import React, {createContext, ReactNode, useContext, useEffect, useState} from "react";
 
 interface AuthContextType {
     accessToken: string | null;
@@ -9,7 +9,8 @@ interface AuthContextType {
     loading: boolean;
     login: (accessToken: string, refreshToken: string) => Promise<void>;
     logout: () => Promise<void>;
-    refreshTokens: () => Promise<boolean>;
+    /** Zwraca nowy access token albo null (wtedy sesja nieaktualna). */
+    refreshTokens: () => Promise<string | null>;
     authorizedFetch: (input: RequestInfo, init?: RequestInit) => Promise<Response>;
 }
 
@@ -20,11 +21,17 @@ const AuthContext = createContext<AuthContextType>({
     loading: true,
     login: async () => {},
     logout: async () => {},
-    refreshTokens: async () => false,
+    refreshTokens: async () => null,
     authorizedFetch: async () => new Response(null, { status: 401 }),
 });
 
-const decodeJWT = (token: string | null | undefined): { sub?: string } | null => {
+type JwtPayload = {
+    sub?: string;
+    exp?: number;
+    type?: string;
+};
+
+const decodeJWT = (token: string | null | undefined): JwtPayload | null => {
     if (token == null || typeof token !== "string") {
         return null;
     }
@@ -33,8 +40,6 @@ const decodeJWT = (token: string | null | undefined): { sub?: string } | null =>
         if (parts.length !== 3) {
             return null;
         }
-        
-        // Dekoduj payload (druga część tokena)
         const payload = parts[1];
         const decoded = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
         return JSON.parse(decoded);
@@ -44,12 +49,22 @@ const decodeJWT = (token: string | null | undefined): { sub?: string } | null =>
     }
 };
 
+/** Access token wygasł lub wygaśnie w ciągu 2 min — odśwież zanim poleci request (unikasz 403 z Spring Security). */
+const shouldRefreshAccessTokenBeforeRequest = (token: string): boolean => {
+    const p = decodeJWT(token);
+    if (!p?.exp || typeof p.exp !== "number") {
+        return false;
+    }
+    const expMs = p.exp * 1000;
+    const bufferMs = 2 * 60 * 1000;
+    return expMs <= Date.now() + bufferMs;
+};
+
 const timeoutFetch = async (url: string, options: RequestInit = {}, timeoutMs = 8000) => {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeoutMs);
     try {
-        const res = await fetch(url, { ...options, signal: controller.signal });
-        return res;
+        return await fetch(url, {...options, signal: controller.signal});
     } finally {
         clearTimeout(id);
     }
@@ -75,9 +90,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setRefreshToken(refresh);
         
         const userIdFromToken = extractUserId(access);
-        if (userIdFromToken) {
+        if (userIdFromToken !== null) {
             setUserId(userIdFromToken);
-            await SecureStore.setItemAsync("user_id", userIdFromToken.toString());
         }
         
         await SecureStore.setItemAsync("access_token", access);
@@ -90,12 +104,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUserId(null);
         await SecureStore.deleteItemAsync("access_token");
         await SecureStore.deleteItemAsync("refresh_token");
-        await SecureStore.deleteItemAsync("user_id");
     };
 
-    const refreshTokens = async (): Promise<boolean> => {
+    const refreshTokens = async (): Promise<string | null> => {
         const currentRefresh = refreshToken || (await SecureStore.getItemAsync("refresh_token"));
-        if (!currentRefresh) return false;
+        if (!currentRefresh) {
+            console.warn("[refreshTokens] brak refresh tokenu");
+            return null;
+        }
 
         try {
             const response = await timeoutFetch(API_ENDPOINTS.AUTH.REFRESH, {
@@ -106,21 +122,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             if (!response.ok) {
                 console.warn("[refreshTokens] Failed:", response.status);
                 await logout();
-                return false;
+                return null;
             }
 
             const data = await response.json();
-            if (data.access_token && data.refresh_token) {
-                await login(data.access_token, data.refresh_token);
-                await new Promise(r => setTimeout(r, 100));
-                return true;
+            const newAccess =
+                (typeof data?.access_token === "string" && data.access_token) ||
+                (typeof data?.accessToken === "string" && data.accessToken) ||
+                "";
+            const newRefresh =
+                (typeof data?.refresh_token === "string" && data.refresh_token) ||
+                (typeof data?.refreshToken === "string" && data.refreshToken) ||
+                "";
+
+            if (newAccess && newRefresh) {
+                await login(newAccess, newRefresh);
+                console.log("[refreshTokens] OK — używam access tokenu z odpowiedzi (bez ponownego odczytu ze store)");
+                return newAccess;
             }
 
             await logout();
-            return false;
+            return null;
         } catch (err) {
             console.error("[refreshTokens] error:", err);
-            return false;
+            return null;
         }
     };
 
@@ -131,22 +156,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             try {
                 const storedAccess = await SecureStore.getItemAsync("access_token");
                 const storedRefresh = await SecureStore.getItemAsync("refresh_token");
-                const storedUserId = await SecureStore.getItemAsync("user_id");
                 
                 if (storedAccess) {
                     setAccessToken(storedAccess);
-                    // Wyciągnij userId z tokena, jeśli nie ma w SecureStore
                     const userIdFromToken = extractUserId(storedAccess);
-                    if (userIdFromToken) {
+                    if (userIdFromToken !== null) {
                         setUserId(userIdFromToken);
-                        if (!storedUserId) {
-                            await SecureStore.setItemAsync("user_id", userIdFromToken.toString());
-                        }
-                    } else if (storedUserId) {
-                        setUserId(parseInt(storedUserId, 10));
                     }
-                } else if (storedUserId) {
-                    setUserId(parseInt(storedUserId, 10));
                 }
                 
                 if (storedRefresh) setRefreshToken(storedRefresh);
@@ -154,14 +170,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 setLoading(false);
             }
             try {
-                const refreshed = await refreshTokens();
-                // userId jest już aktualizowany w funkcji login, która jest wywoływana w refreshTokens
+                await refreshTokens();
             } catch {}
         };
         bootstrap();
     }, []);
 
-    const authorizedFetch = async (input: RequestInfo, init: RequestInit = {}, retry = true): Promise<Response> => {
+     const authorizedFetch = async (input: RequestInfo, init: RequestInit = {}, retry = true): Promise<Response> => {
         const buildHeaders = (token: string, headersInit?: HeadersInit): Headers => {
             const headers = new Headers(headersInit);
             headers.set("Authorization", `Bearer ${token}`);
@@ -173,12 +188,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         const performRequest = async (token: string) => {
             const headers = buildHeaders(token, init.headers);
-            const rawAuthHeader = headers instanceof Headers
-                ? headers.get("Authorization")
-                : (headers as Record<string, string>)?.Authorization;
-            const maskedAuthHeader = rawAuthHeader
-                ? `${rawAuthHeader.slice(0, 16)}...${rawAuthHeader.slice(-5)}`
-                : 'none';
             return fetch(input, { ...init, headers });
         };
 
@@ -193,18 +202,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             throw new Error("Brak tokenu uwierzytelniającego");
         }
 
-        let response = await performRequest(token);
-
-        if (response.status === 401 && retry) {
-            const refreshed = await refreshTokens();
-            if (!refreshed) {
+        if (shouldRefreshAccessTokenBeforeRequest(token)) {
+            console.log("[authorizedFetch] access token expired / expiring soon → refresh before request");
+            const newAccess = await refreshTokens();
+            if (!newAccess) {
                 throw new Error("Sesja wygasła. Zaloguj się ponownie.");
             }
-            token = await getToken();
-            if (!token) {
-                throw new Error("Brak tokenu uwierzytelniającego");
+            token = newAccess;
+        }
+
+        let response = await performRequest(token);
+
+        if ((response.status === 401 || response.status === 403) && retry) {
+            console.warn("[authorizedFetch]", response.status, "→ próba odświeżenia tokenu i powtórki żądania");
+            const newAccess = await refreshTokens();
+            if (!newAccess) {
+                throw new Error("Sesja wygasła. Zaloguj się ponownie.");
             }
-            response = await performRequest(token);
+            response = await performRequest(newAccess);
         }
 
         return response;

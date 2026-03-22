@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useState, useMemo } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { isEventActive, isEventFinished } from '@/utils/eventStatus';
 
 interface Event {
   id: number;
@@ -116,15 +117,15 @@ export default function EventList({ events, loading }: EventListProps) {
               fontSize: isSmallScreen ? 11 : 12,
             },
           ]}>{formatDate(item.created_at)}</Text>
-          <View style={[styles.statusBadge, item.status === 'finished' && styles.statusFinished]}>
+          <View style={[styles.statusBadge, isEventFinished(item.status) && styles.statusFinished]}>
             <Text style={[
               styles.statusText,
-              item.status === 'finished' && styles.statusTextFinished,
+              isEventFinished(item.status) && styles.statusTextFinished,
               {
                 fontSize: isSmallScreen ? 10 : 11,
               },
             ]}>
-              {item.status === 'active' ? 'Aktywny' : 'Zakończony'}
+              {isEventActive(item.status) ? 'Aktywny' : 'Zakończony'}
             </Text>
           </View>
         </View>

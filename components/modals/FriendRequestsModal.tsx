@@ -1,4 +1,4 @@
-import { View, StyleSheet, FlatList, Modal, Dimensions } from 'react-native';
+import { View, StyleSheet, FlatList, Modal } from 'react-native';
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { API_ENDPOINTS } from '@/urls/api';
@@ -33,8 +33,16 @@ interface FriendRequestsModalProps {
 
 type TabType = 'received' | 'sent';
 
+const normalizeRequest = (request: any): FriendRequest => ({
+  id: Number(request?.id),
+  from_user: request?.from_user ?? request?.fromUser ?? null,
+  to_user: request?.to_user ?? request?.toUser ?? null,
+  status: request?.status ?? '',
+  created_at: request?.created_at ?? request?.createdAt ?? '',
+});
+
 export default function FriendRequestsModal({ visible, onClose, onFriendAccepted }: FriendRequestsModalProps) {
-  const { accessToken } = useAuth();
+  const { authorizedFetch } = useAuth();
 
   const [activeTab, setActiveTab] = useState<TabType>('received');
   const [receivedRequests, setReceivedRequests] = useState<FriendRequest[]>([]);
@@ -43,40 +51,30 @@ export default function FriendRequestsModal({ visible, onClose, onFriendAccepted
   const [processing, setProcessing] = useState<number | null>(null);
 
   const fetchRequests = useCallback(async () => {
-    if (!accessToken) return;
-
     setLoading(true);
     try {
       const [receivedRes, sentRes] = await Promise.all([
-        fetch(API_ENDPOINTS.FRIENDS.PENDING, {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-        }),
-        fetch(API_ENDPOINTS.FRIENDS.SENT, {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-        }),
+        authorizedFetch(API_ENDPOINTS.FRIENDS.PENDING, { method: 'GET' }),
+        authorizedFetch(API_ENDPOINTS.FRIENDS.SENT, { method: 'GET' }),
       ]);
 
       if (receivedRes.ok) {
         const received = await receivedRes.json();
-        setReceivedRequests(received || []);
+        const parsedReceived = Array.isArray(received) ? received.map(normalizeRequest) : [];
+        setReceivedRequests(parsedReceived);
       }
 
       if (sentRes.ok) {
         const sent = await sentRes.json();
-        setSentRequests(sent || []);
+        const parsedSent = Array.isArray(sent) ? sent.map(normalizeRequest) : [];
+        setSentRequests(parsedSent);
       }
     } catch (error) {
       console.error('Error fetching requests:', error);
     } finally {
       setLoading(false);
     }
-  }, [accessToken]);
+  }, [authorizedFetch]);
 
   useEffect(() => {
     if (visible) {
@@ -85,16 +83,12 @@ export default function FriendRequestsModal({ visible, onClose, onFriendAccepted
   }, [visible, fetchRequests]);
 
   const handleAccept = async (friendshipId: number) => {
-    if (!accessToken || processing === friendshipId) return;
+    if (processing === friendshipId) return;
 
     setProcessing(friendshipId);
     try {
-      const response = await fetch(API_ENDPOINTS.FRIENDS.ACCEPT(friendshipId), {
+      const response = await authorizedFetch(API_ENDPOINTS.FRIENDS.ACCEPT(friendshipId), {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
       });
 
       if (response.ok) {
@@ -111,16 +105,12 @@ export default function FriendRequestsModal({ visible, onClose, onFriendAccepted
   };
 
   const handleReject = async (friendshipId: number) => {
-    if (!accessToken || processing === friendshipId) return;
+    if (processing === friendshipId) return;
 
     setProcessing(friendshipId);
     try {
-      const response = await fetch(API_ENDPOINTS.FRIENDS.REJECT(friendshipId), {
+      const response = await authorizedFetch(API_ENDPOINTS.FRIENDS.REJECT(friendshipId), {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
       });
 
       if (response.ok) {

@@ -28,13 +28,6 @@ interface Event {
     email: string;
   };
 }
-
-interface UserProfile {
-  id: number;
-  username: string;
-  email: string;
-}
-
 export default function Home() {
   const { accessToken, userId } = useAuth();
   const router = useRouter();
@@ -85,8 +78,7 @@ export default function Home() {
     }
 
     try {
-      const skip = pageNum * PAGE_SIZE;
-      const response = await fetch(`${API_ENDPOINTS.EVENTS.ACTIVE}?skip=${skip}&limit=${PAGE_SIZE}`, {
+      const response = await fetch(`${API_ENDPOINTS.EVENTS.ACTIVE}?page=${pageNum}&size=${PAGE_SIZE}`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
@@ -98,7 +90,7 @@ export default function Home() {
       }
 
       const data = await response.json();
-      const newEvents = data || [];
+      const newEvents = Array.isArray(data) ? data : Array.isArray(data?.content) ? data.content : [];
       
       if (isInitial) {
         setEvents(newEvents);
@@ -106,7 +98,11 @@ export default function Home() {
         setEvents(prev => [...prev, ...newEvents]);
       }
       
-      setHasMore(newEvents.length === PAGE_SIZE);
+      if (typeof data?.totalPages === 'number') {
+        setHasMore(pageNum + 1 < data.totalPages);
+      } else {
+        setHasMore(newEvents.length === PAGE_SIZE);
+      }
     } catch (error: any) {
       console.error('Error fetching events:', error);
       if (isInitial) {

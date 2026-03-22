@@ -1,7 +1,6 @@
 import BackgroundGradient from "@/components/BackgroundGradient";
-import { useAuth } from "@/context/AuthContext";
+import { useLogin } from "@/hooks/auth/useLogin";
 import UserLogin from "@/types/UserLogin";
-import { API_ENDPOINTS } from "@/urls/api";
 import React, { useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -9,10 +8,9 @@ import { useRouter } from "expo-router";
 
 export default function Login() {
     const router = useRouter();
-    const { login } = useAuth();
+    const { signIn, loading } = useLogin();
     const [userlogin, setUserLogin] = useState<UserLogin>({ username: "", password: "" });
     const [showPassword, setShowPassword] = useState<boolean>(false);
-    const [loading, setLoading] = useState<boolean>(false);
 
     const handleChange = (key: keyof UserLogin, value: string) => {
         setUserLogin((prev) => ({ ...prev, [key]: value }));
@@ -23,29 +21,15 @@ export default function Login() {
             Alert.alert("Błąd", "Wypełnij wszystkie pola");
             return;
         }
-        setLoading(true);
+
         try {
-            const response = await fetch(API_ENDPOINTS.AUTH.LOGIN, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ username: userlogin.username, password: userlogin.password }),
+            await signIn({
+                username: userlogin.username,
+                password: userlogin.password,
             });
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({} as any));
-                throw new Error((errorData as any).detail || `Błąd logowania: ${response.status}`);
-            }
-            const tokenData = await response.json();
-            const access = tokenData.access_token ?? tokenData.accessToken;
-            const refresh = tokenData.refresh_token ?? tokenData.refreshToken;
-            if (!access || !refresh) {
-                throw new Error("Błąd logowania: brak tokenów w odpowiedzi");
-            }
-            await login(access, refresh);
             router.replace("/(tabs)");
         } catch (err: any) {
             Alert.alert("Błąd logowania", err.message || "Wystąpił błąd podczas logowania");
-        } finally {
-            setLoading(false);
         }
     };
 
