@@ -1,6 +1,8 @@
-// app/_layout.tsx
+import "react-native-gesture-handler";
+import "react-native-reanimated";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
-import { DarkTheme, ThemeProvider } from "@react-navigation/native";
+import { QueryProvider } from "@/providers/QueryProvider";
+import { DarkTheme, ThemeProvider } from "expo-router/react-navigation";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -19,7 +21,6 @@ function RootLayoutNav() {
 
     useEffect(() => {
         if (loading) return;
-        // @ts-ignore
         if (!segments || segments.length === 0) return;
         const inAuthGroup = segments[0] === "(auth)";
         const inTabsGroup = segments[0] === "(tabs)";
@@ -60,7 +61,9 @@ export default function RootLayout() {
             <StatusBar style="light" />
             <ThemeProvider value={TransparentDark}>
                 <AuthProvider>
-                    <RootLayoutNav />
+                    <QueryProvider>
+                        <RootLayoutNav />
+                    </QueryProvider>
                 </AuthProvider>
             </ThemeProvider>
         </View>

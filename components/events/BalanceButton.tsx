@@ -1,5 +1,6 @@
-import { Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import { Text, StyleSheet, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AnimatedPressable from '@/components/common/AnimatedPressable';
 
 interface BalanceButtonProps {
   onPress: () => void;
@@ -10,7 +11,7 @@ export default function BalanceButton({ onPress }: BalanceButtonProps) {
   const isSmallScreen = width < 375;
 
   return (
-    <TouchableOpacity
+    <AnimatedPressable
       style={styles.balanceButton}
       onPress={onPress}
     >
@@ -21,7 +22,7 @@ export default function BalanceButton({ onPress }: BalanceButtonProps) {
       ]}>
         Podsumowanie
       </Text>
-    </TouchableOpacity>
+    </AnimatedPressable>
   );
 }
 

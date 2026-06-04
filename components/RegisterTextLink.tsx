@@ -1,4 +1,3 @@
-// components/RegisterTextLink.tsx
 import React from "react";
 import { Text, StyleSheet, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";

@@ -9,6 +9,7 @@ interface FriendRequest {
     id: number;
     username: string;
     email: string;
+    avatar_url?: string | null;
   } | null;
   to_user: {
     id: number;
@@ -44,7 +45,7 @@ export default function ReceivedRequestItem({
       },
     ]}>
       <View style={styles.userInfo}>
-        <UserAvatar />
+        <UserAvatar imageUrl={item.from_user?.avatar_url} />
         <UserInfo 
           username={item.from_user?.username || 'Nieznany użytkownik'}
           email={item.from_user?.email || ''}

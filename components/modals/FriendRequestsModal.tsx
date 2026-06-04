@@ -1,29 +1,17 @@
 import { View, StyleSheet, FlatList, Modal } from 'react-native';
-import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@/context/AuthContext';
-import { API_ENDPOINTS } from '@/urls/api';
+import { useState } from 'react';
 import ModalHeader from '@/components/common/ModalHeader';
 import TabButton from '@/components/common/TabButton';
 import EmptyState from '@/components/common/EmptyState';
 import LoadingIndicator from '@/components/common/LoadingIndicator';
 import ReceivedRequestItem from '@/components/friends/ReceivedRequestItem';
 import SentRequestItem from '@/components/friends/SentRequestItem';
-
-interface FriendRequest {
-  id: number;
-  from_user: {
-    id: number;
-    username: string;
-    email: string;
-  } | null;
-  to_user: {
-    id: number;
-    username: string;
-    email: string;
-  } | null;
-  status: string;
-  created_at: string;
-}
+import { useFriendRequests } from '@/hooks/friends/useFriendRequests';
+import {
+  useAcceptFriendRequest,
+  useRejectFriendRequest,
+} from '@/hooks/friends/useRespondFriendRequest';
+import type { FriendRequest } from '@/types/api';
 
 interface FriendRequestsModalProps {
   visible: boolean;
@@ -33,102 +21,40 @@ interface FriendRequestsModalProps {
 
 type TabType = 'received' | 'sent';
 
-const normalizeRequest = (request: any): FriendRequest => ({
-  id: Number(request?.id),
-  from_user: request?.from_user ?? request?.fromUser ?? null,
-  to_user: request?.to_user ?? request?.toUser ?? null,
-  status: request?.status ?? '',
-  created_at: request?.created_at ?? request?.createdAt ?? '',
-});
-
 export default function FriendRequestsModal({ visible, onClose, onFriendAccepted }: FriendRequestsModalProps) {
-  const { authorizedFetch } = useAuth();
-
   const [activeTab, setActiveTab] = useState<TabType>('received');
-  const [receivedRequests, setReceivedRequests] = useState<FriendRequest[]>([]);
-  const [sentRequests, setSentRequests] = useState<FriendRequest[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [processing, setProcessing] = useState<number | null>(null);
 
-  const fetchRequests = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [receivedRes, sentRes] = await Promise.all([
-        authorizedFetch(API_ENDPOINTS.FRIENDS.PENDING, { method: 'GET' }),
-        authorizedFetch(API_ENDPOINTS.FRIENDS.SENT, { method: 'GET' }),
-      ]);
+  const { receivedRequests, sentRequests, loading, refetch } = useFriendRequests(visible);
+  const { accept, processingId: acceptProcessingId } = useAcceptFriendRequest();
+  const { reject, processingId: rejectProcessingId } = useRejectFriendRequest();
 
-      if (receivedRes.ok) {
-        const received = await receivedRes.json();
-        const parsedReceived = Array.isArray(received) ? received.map(normalizeRequest) : [];
-        setReceivedRequests(parsedReceived);
-      }
-
-      if (sentRes.ok) {
-        const sent = await sentRes.json();
-        const parsedSent = Array.isArray(sent) ? sent.map(normalizeRequest) : [];
-        setSentRequests(parsedSent);
-      }
-    } catch (error) {
-      console.error('Error fetching requests:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [authorizedFetch]);
-
-  useEffect(() => {
-    if (visible) {
-      fetchRequests();
-    }
-  }, [visible, fetchRequests]);
+  const processing =
+    acceptProcessingId ?? rejectProcessingId ?? null;
 
   const handleAccept = async (friendshipId: number) => {
     if (processing === friendshipId) return;
-
-    setProcessing(friendshipId);
     try {
-      const response = await authorizedFetch(API_ENDPOINTS.FRIENDS.ACCEPT(friendshipId), {
-        method: 'POST',
-      });
-
-      if (response.ok) {
-        await fetchRequests();
-        if (onFriendAccepted) {
-          onFriendAccepted();
-        }
-      }
+      await accept(friendshipId);
+      await refetch();
+      onFriendAccepted?.();
     } catch (error) {
       console.error('Error accepting request:', error);
-    } finally {
-      setProcessing(null);
     }
   };
 
   const handleReject = async (friendshipId: number) => {
     if (processing === friendshipId) return;
-
-    setProcessing(friendshipId);
     try {
-      const response = await authorizedFetch(API_ENDPOINTS.FRIENDS.REJECT(friendshipId), {
-        method: 'POST',
-      });
-
-      if (response.ok) {
-        await fetchRequests();
-        if (onFriendAccepted) {
-          onFriendAccepted();
-        }
-      }
+      await reject(friendshipId);
+      await refetch();
     } catch (error) {
       console.error('Error rejecting request:', error);
-    } finally {
-      setProcessing(null);
     }
   };
 
   const currentRequests = activeTab === 'received' 
-    ? receivedRequests.filter(req => req.from_user !== null)
-    : sentRequests.filter(req => req.to_user !== null);
+    ? receivedRequests.filter((req) => req.from_user !== null)
+    : sentRequests.filter((req) => req.to_user !== null);
 
   const renderItem = ({ item }: { item: FriendRequest }) => {
     if (activeTab === 'received') {
@@ -140,9 +66,8 @@ export default function FriendRequestsModal({ visible, onClose, onFriendAccepted
           onReject={handleReject}
         />
       );
-    } else {
-      return <SentRequestItem item={item} />;
     }
+    return <SentRequestItem item={item} />;
   };
 
   return (
@@ -225,5 +150,3 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
 });
-
-

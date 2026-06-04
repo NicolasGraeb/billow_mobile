@@ -18,7 +18,7 @@ interface CreateEventModalProps {
 export default function CreateEventModal({ visible, onClose, onEventCreated, currentUserId }: CreateEventModalProps) {
   const { width } = Dimensions.get('window');
   const isSmallScreen = width < 375;
-  const { friends, loading: friendsLoading, fetchFriends } = useFriendsList();
+  const { friends, loading: friendsLoading } = useFriendsList({ enabled: visible });
   const { createEvent, creating } = useCreateEvent();
 
   const [eventName, setEventName] = useState('');
@@ -27,12 +27,11 @@ export default function CreateEventModal({ visible, onClose, onEventCreated, cur
 
   useEffect(() => {
     if (visible) {
-      void fetchFriends();
       setEventName('');
       setDescription('');
       setSelectedFriends(new Set());
     }
-  }, [visible, fetchFriends]);
+  }, [visible]);
 
   const getFriendUser = (friend: FriendRelation) => {
     if (!currentUserId) {
@@ -110,7 +109,7 @@ export default function CreateEventModal({ visible, onClose, onEventCreated, cur
               <Ionicons name="checkmark" size={isSmallScreen ? 18 : 20} color="#FFB90D" />
             )}
           </View>
-          <UserAvatar size={isSmallScreen ? 36 : 40} />
+          <UserAvatar size={isSmallScreen ? 36 : 40} imageUrl={friendUser.avatar_url} showMargin={false} />
           <UserInfo 
             username={friendUser.username}
             email={friendUser.email}

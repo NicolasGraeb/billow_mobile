@@ -2,6 +2,7 @@ export interface ChatUser {
   id: number;
   username: string;
   email: string;
+  avatar_url?: string | null;
 }
 
 export interface ChatMessage {
@@ -11,4 +12,3 @@ export interface ChatMessage {
   content: string;
   created_at: string;
 }
-

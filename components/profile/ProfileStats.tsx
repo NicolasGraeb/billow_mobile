@@ -9,14 +9,14 @@ interface ProfileStatsProps {
 export default function ProfileStats({ friendsCount }: ProfileStatsProps) {
   return (
     <View style={styles.container}>
-      {/* Blur background */}
+      {}
       <BlurView
         intensity={15}
         tint="light"
         style={StyleSheet.absoluteFill}
       />
       
-      {/* Semi-transparent overlay */}
+      {}
       <View
         style={[
           StyleSheet.absoluteFill,

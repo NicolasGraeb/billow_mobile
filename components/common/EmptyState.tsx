@@ -8,28 +8,30 @@ interface EmptyStateProps {
   textSize?: number;
 }
 
-export default function EmptyState({ 
-  icon = 'mail-outline', 
-  message, 
+export default function EmptyState({
+  icon = 'mail-outline',
+  message,
   iconSize,
-  textSize 
+  textSize,
 }: EmptyStateProps) {
   const { width } = Dimensions.get('window');
   const isSmallScreen = width < 375;
 
   return (
     <View style={styles.emptyContainer}>
-      <Ionicons 
-        name={icon} 
-        size={iconSize || (isSmallScreen ? 48 : 56)} 
-        color="#6B7280" 
+      <Ionicons
+        name={icon}
+        size={iconSize || (isSmallScreen ? 48 : 56)}
+        color="#6B7280"
       />
-      <Text style={[
-        styles.emptyText,
-        {
-          fontSize: textSize || (isSmallScreen ? 13 : 14),
-        },
-      ]}>
+      <Text
+        style={[
+          styles.emptyText,
+          {
+            fontSize: textSize || (isSmallScreen ? 13 : 14),
+          },
+        ]}
+      >
         {message}
       </Text>
     </View>
@@ -49,5 +51,3 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
-
-

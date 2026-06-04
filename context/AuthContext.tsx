@@ -9,7 +9,6 @@ interface AuthContextType {
     loading: boolean;
     login: (accessToken: string, refreshToken: string) => Promise<void>;
     logout: () => Promise<void>;
-    /** Zwraca nowy access token albo null (wtedy sesja nieaktualna). */
     refreshTokens: () => Promise<string | null>;
     authorizedFetch: (input: RequestInfo, init?: RequestInit) => Promise<Response>;
 }
@@ -49,7 +48,6 @@ const decodeJWT = (token: string | null | undefined): JwtPayload | null => {
     }
 };
 
-/** Access token wygasł lub wygaśnie w ciągu 2 min — odśwież zanim poleci request (unikasz 403 z Spring Security). */
 const shouldRefreshAccessTokenBeforeRequest = (token: string): boolean => {
     const p = decodeJWT(token);
     if (!p?.exp || typeof p.exp !== "number") {
@@ -177,10 +175,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }, []);
 
      const authorizedFetch = async (input: RequestInfo, init: RequestInit = {}, retry = true): Promise<Response> => {
+        const isFormDataBody = init.body instanceof FormData;
+
         const buildHeaders = (token: string, headersInit?: HeadersInit): Headers => {
             const headers = new Headers(headersInit);
             headers.set("Authorization", `Bearer ${token}`);
-            if (!headers.has("Content-Type") && !(init && init.body instanceof FormData)) {
+            if (isFormDataBody) {
+                headers.delete("Content-Type");
+            } else if (!headers.has("Content-Type")) {
                 headers.set("Content-Type", "application/json");
             }
             return headers;

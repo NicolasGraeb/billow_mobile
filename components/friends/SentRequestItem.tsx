@@ -13,6 +13,7 @@ interface FriendRequest {
     id: number;
     username: string;
     email: string;
+    avatar_url?: string | null;
   } | null;
   status: string;
   created_at: string;
@@ -37,7 +38,7 @@ export default function SentRequestItem({ item }: SentRequestItemProps) {
       },
     ]}>
       <View style={styles.userInfo}>
-        <UserAvatar />
+        <UserAvatar imageUrl={targetUser.avatar_url} />
         <UserInfo 
           username={targetUser.username}
           email={targetUser.email}

@@ -1,9 +1,8 @@
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, FlatList, Dimensions, ActivityIndicator, Alert, ScrollView } from 'react-native';
 import { useState, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '@/context/AuthContext';
-import { API_ENDPOINTS } from '@/urls/api';
 import ModalHeader from '@/components/common/ModalHeader';
+import { useCreateExpense } from '@/hooks/expenses/useCreateExpense';
 
 interface Participant {
   id: number;
@@ -24,7 +23,7 @@ interface ParticipantSplit {
   user_id: number;
   amount: number;
   selected: boolean;
-  displayValue?: string; // Przechowuje surową wartość podczas edycji
+  displayValue?: string;
 }
 
 export default function CreateExpenseModal({
@@ -37,15 +36,13 @@ export default function CreateExpenseModal({
 }: CreateExpenseModalProps) {
   const { width } = Dimensions.get('window');
   const isSmallScreen = width < 375;
-  const { authorizedFetch } = useAuth();
+  const { createExpense, creating } = useCreateExpense(eventId);
 
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [payerId, setPayerId] = useState<number>(currentUserId);
   const [participantSplits, setParticipantSplits] = useState<ParticipantSplit[]>([]);
   const [splitType, setSplitType] = useState<'equal' | 'custom'>('equal');
-  const [creating, setCreating] = useState(false);
-
   useEffect(() => {
     if (visible) {
       setAmount('');
@@ -71,7 +68,7 @@ export default function CreateExpenseModal({
           participantSplits.map((p) => ({
             ...p,
             amount: p.selected ? equalAmount : 0,
-            displayValue: undefined, // Reset display value dla równomiernego podziału
+            displayValue: undefined,
           }))
         );
       }
@@ -87,19 +84,15 @@ export default function CreateExpenseModal({
   };
 
   const formatAmountInput = (value: string): string => {
-    // Usuń wszystkie znaki oprócz cyfr, kropki i przecinka
     let cleaned = value.replace(/[^\d.,]/g, '');
     
-    // Zamień przecinek na kropkę
     cleaned = cleaned.replace(',', '.');
     
-    // Pozwól tylko na jedną kropkę
     const parts = cleaned.split('.');
     if (parts.length > 2) {
       cleaned = parts[0] + '.' + parts.slice(1).join('');
     }
     
-    // Ogranicz do 2 miejsc po przecinku
     if (parts.length === 2 && parts[1].length > 2) {
       cleaned = parts[0] + '.' + parts[1].substring(0, 2);
     }
@@ -142,38 +135,23 @@ export default function CreateExpenseModal({
       return;
     }
 
-    setCreating(true);
     try {
-      const response = await authorizedFetch(API_ENDPOINTS.EXPENSES.CREATE, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          event_id: eventId,
-          payer_id: payerId,
-          amount: parseFloat(amount),
-          description: description.trim() || null,
-          participants: selectedParticipants.map((p) => ({
-            user_id: p.user_id,
-            amount: p.amount,
-          })),
-        }),
+      await createExpense({
+        event_id: eventId,
+        payer_id: payerId,
+        amount: parseFloat(amount),
+        description: description.trim() || null,
+        participants: selectedParticipants.map((p) => ({
+          user_id: p.user_id,
+          amount: p.amount,
+        })),
       });
 
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ detail: 'Nie udało się utworzyć wydatku' }));
-        throw new Error(error.detail || 'Nie udało się utworzyć wydatku');
-      }
-
-      if (onExpenseCreated) {
-        onExpenseCreated();
-      }
+      onExpenseCreated?.();
       onClose();
-    } catch (error: any) {
-      Alert.alert('Błąd', error.message || 'Nie udało się utworzyć wydatku');
-    } finally {
-      setCreating(false);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Nie udało się utworzyć wydatku';
+      Alert.alert('Błąd', message);
     }
   };
 
@@ -267,7 +245,6 @@ export default function CreateExpenseModal({
                   const split = participantSplits.find((p) => p.user_id === item.id);
                   const isSelected = split?.selected || false;
 
-                  // @ts-ignore
                     return (
                     <View style={[styles.participantSplitItem, { padding: isSmallScreen ? 12 : 16 }]}>
                       <TouchableOpacity

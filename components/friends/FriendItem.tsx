@@ -2,26 +2,10 @@ import { View, StyleSheet, Dimensions } from 'react-native';
 import UserAvatar from '@/components/common/UserAvatar';
 import UserInfo from '@/components/common/UserInfo';
 
-interface Friend {
-  id: number;
-  user_id: number;
-  friend_id: number;
-  status: string;
-  created_at: string;
-  user: {
-    id: number;
-    username: string;
-    email: string;
-  };
-  friend: {
-    id: number;
-    username: string;
-    email: string;
-  };
-}
+import type { FriendRelation } from '@/types/api';
 
 interface FriendItemProps {
-  item: Friend;
+  item: FriendRelation;
   currentUserId?: number;
 }
 
@@ -55,7 +39,7 @@ export default function FriendItem({ item, currentUserId }: FriendItemProps) {
       },
     ]}>
       <View style={styles.userInfo}>
-        <UserAvatar />
+        <UserAvatar imageUrl={friendUser.avatar_url} />
         <UserInfo 
           username={friendUser.username}
           email={friendUser.email}

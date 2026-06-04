@@ -1,31 +1,8 @@
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-
-interface ExpenseParticipant {
-  id: number;
-  user_id: number;
-  amount: number;
-  user: {
-    id: number;
-    username: string;
-    email: string;
-  };
-}
-
-interface Expense {
-  id: number;
-  event_id: number;
-  payer_id: number;
-  amount: number;
-  description: string | null;
-  created_at: string;
-  payer: {
-    id: number;
-    username: string;
-    email: string;
-  };
-  participants: ExpenseParticipant[];
-}
+import AnimatedPressable from '@/components/common/AnimatedPressable';
+import UserAvatar from '@/components/common/UserAvatar';
+import type { Expense } from '@/types/api';
 
 interface ExpenseCardProps {
   expense: Expense;
@@ -48,9 +25,9 @@ export default function ExpenseCard({ expense, isCreator, isActive, onEdit }: Ex
           {expense.amount.toFixed(2)} zł
         </Text>
         {isCreator && isActive && (
-          <TouchableOpacity onPress={() => onEdit(expense)}>
+          <AnimatedPressable onPress={() => onEdit(expense)}>
             <Ionicons name="create-outline" size={isSmallScreen ? 18 : 20} color="#6B7280" />
-          </TouchableOpacity>
+          </AnimatedPressable>
         )}
       </View>
       {expense.description && (
@@ -61,12 +38,15 @@ export default function ExpenseCard({ expense, isCreator, isActive, onEdit }: Ex
           {expense.description}
         </Text>
       )}
-      <Text style={[
-        styles.expensePayer,
-        { fontSize: isSmallScreen ? 12 : 13 },
-      ]}>
-        Zapłacił: {expense.payer.username}
-      </Text>
+      <View style={styles.payerRow}>
+        <UserAvatar size={24} imageUrl={expense.payer.avatar_url} showMargin={false} />
+        <Text style={[
+          styles.expensePayer,
+          { fontSize: isSmallScreen ? 12 : 13 },
+        ]}>
+          Zapłacił: {expense.payer.username}
+        </Text>
+      </View>
       {expense.participants && expense.participants.length > 0 && (
         <View style={styles.participantsList}>
           <Text style={[
@@ -108,6 +88,11 @@ const styles = StyleSheet.create({
   },
   expenseDescription: {
     color: '#A7B0C0',
+  },
+  payerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   expensePayer: {
     color: '#6B7280',

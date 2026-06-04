@@ -1,28 +1,18 @@
 import { View, Text, StyleSheet, Modal, FlatList, TouchableOpacity, TextInput, Dimensions, ActivityIndicator, Alert } from 'react-native';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '@/context/AuthContext';
-import { API_ENDPOINTS } from '@/urls/api';
 import ModalHeader from '@/components/common/ModalHeader';
-
-interface User {
-  id: number;
-  username: string;
-  email: string;
-}
-
-interface Participant {
-  id: number;
-  username: string;
-  email: string;
-}
+import UserAvatar from '@/components/common/UserAvatar';
+import { useAddParticipant } from '@/hooks/events/useAddParticipant';
+import { useParticipantSearch } from '@/hooks/users/useParticipantSearch';
+import type { UserSummary } from '@/types/api';
 
 interface AddParticipantModalProps {
   visible: boolean;
   onClose: () => void;
   onParticipantAdded?: () => void;
   eventId: number;
-  currentParticipants: Participant[];
+  currentParticipants: UserSummary[];
 }
 
 export default function AddParticipantModal({
@@ -34,101 +24,45 @@ export default function AddParticipantModal({
 }: AddParticipantModalProps) {
   const { width } = Dimensions.get('window');
   const isSmallScreen = width < 375;
-  const { authorizedFetch } = useAuth();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [addingParticipant, setAddingParticipant] = useState<number | null>(null);
-
-  const parseUserList = (payload: unknown): User[] => {
-    if (Array.isArray(payload)) return payload;
-    if (payload && typeof payload === 'object' && 'content' in payload) {
-      const c = (payload as { content?: unknown }).content;
-      return Array.isArray(c) ? c : [];
-    }
-    return [];
-  };
-
-  const searchUsers = useCallback(async (query: string) => {
-    if (query.length < 2) {
-      setUsers([]);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const response = await authorizedFetch(
-        `${API_ENDPOINTS.USERS.SEARCH}?q=${encodeURIComponent(query)}&page=0&size=20`
-      );
-
-      if (!response.ok) {
-        throw new Error('Nie udało się wyszukać użytkowników');
-      }
-
-      const raw = await response.json();
-      const list = parseUserList(raw);
-      const currentParticipantIds = currentParticipants.map((p) => p.id);
-      const filteredData = list.filter((user: User) => !currentParticipantIds.includes(user.id));
-      setUsers(filteredData);
-    } catch (error) {
-      console.error('Error searching users:', error);
-      Alert.alert('Błąd', 'Nie udało się wyszukać użytkowników');
-    } finally {
-      setLoading(false);
-    }
-  }, [authorizedFetch, currentParticipants]);
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const excludeIds = currentParticipants.map((p) => p.id);
 
   useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (searchQuery.length >= 2) {
-        searchUsers(searchQuery);
-      } else {
-        setUsers([]);
-      }
-    }, 500);
-
+    const timeoutId = setTimeout(() => setDebouncedQuery(searchQuery), 500);
     return () => clearTimeout(timeoutId);
-  }, [searchQuery, searchUsers]);
+  }, [searchQuery]);
+
+  const { users, loading } = useParticipantSearch(debouncedQuery, excludeIds, visible);
+  const { addParticipant, addingUserId } = useAddParticipant(eventId);
+
+  useEffect(() => {
+    if (!visible) {
+      setSearchQuery('');
+    }
+  }, [visible]);
 
   const handleAddParticipant = async (userId: number) => {
-    if (addingParticipant === userId) return;
+    if (addingUserId === userId) return;
 
-    setAddingParticipant(userId);
     try {
-      const response = await authorizedFetch(API_ENDPOINTS.EVENTS.ADD_PARTICIPANT(eventId, userId), {
-        method: 'POST',
-      });
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ detail: 'Nie udało się dodać uczestnika' }));
-        throw new Error(error.detail || 'Nie udało się dodać uczestnika');
-      }
-
-      // Usuń dodanego użytkownika z listy wyników
-      setUsers(prev => prev.filter(u => u.id !== userId));
-      
-      if (onParticipantAdded) {
-        onParticipantAdded();
-      }
-      
+      await addParticipant(userId);
+      onParticipantAdded?.();
       Alert.alert('Sukces', 'Uczestnik został dodany do eventu');
-    } catch (error: any) {
-      Alert.alert('Błąd', error.message || 'Nie udało się dodać uczestnika');
-    } finally {
-      setAddingParticipant(null);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Nie udało się dodać uczestnika';
+      Alert.alert('Błąd', message);
     }
   };
 
-  const renderUserItem = ({ item }: { item: User }) => (
+  const renderUserItem = ({ item }: { item: UserSummary }) => (
     <View style={[
       styles.userItem,
       { padding: isSmallScreen ? 12 : 16 },
     ]}>
       <View style={styles.userInfo}>
-        <View style={styles.userAvatar}>
-          <Ionicons name="person" size={isSmallScreen ? 20 : 24} color="#FFB90D" />
-        </View>
+        <UserAvatar size={isSmallScreen ? 40 : 44} imageUrl={item.avatar_url} showMargin={false} />
         <View style={styles.userDetails}>
           <Text style={[
             styles.username,
@@ -147,12 +81,12 @@ export default function AddParticipantModal({
       <TouchableOpacity
         style={[
           styles.addButton,
-          addingParticipant === item.id && styles.addButtonDisabled,
+          addingUserId === item.id && styles.addButtonDisabled,
         ]}
         onPress={() => handleAddParticipant(item.id)}
-        disabled={addingParticipant === item.id}
+        disabled={addingUserId === item.id}
       >
-        {addingParticipant === item.id ? (
+        {addingUserId === item.id ? (
           <ActivityIndicator size="small" color="#FFB90D" />
         ) : (
           <Ionicons name="person-add" size={isSmallScreen ? 18 : 20} color="#FFB90D" />
@@ -184,10 +118,7 @@ export default function AddParticipantModal({
               {searchQuery.length > 0 && (
                 <TouchableOpacity
                   style={styles.clearButton}
-                  onPress={() => {
-                    setSearchQuery('');
-                    setUsers([]);
-                  }}
+                  onPress={() => setSearchQuery('')}
                 >
                   <Ionicons name="close-circle" size={isSmallScreen ? 18 : 20} color="#6B7280" />
                 </TouchableOpacity>
@@ -323,5 +254,3 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
-
-

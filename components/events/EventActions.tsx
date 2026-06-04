@@ -1,5 +1,6 @@
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AnimatedPressable from '@/components/common/AnimatedPressable';
 
 interface EventActionsProps {
   onAddExpense?: () => void;
@@ -51,7 +52,7 @@ export default function EventActions({ onAddExpense, onAddParticipant, onOpenCha
       {topButtons.length > 0 && (
         <View style={[styles.topRow, { flexDirection: isSmallScreen ? 'column' : 'row' }]}>
           {topButtons.map(({ key, label, icon, onPress, style }) => (
-            <TouchableOpacity
+            <AnimatedPressable
               key={key}
               style={[styles.actionButton, style, isSmallScreen && styles.stackedButton]}
               onPress={onPress}
@@ -65,13 +66,13 @@ export default function EventActions({ onAddExpense, onAddParticipant, onOpenCha
               >
                 {label}
               </Text>
-            </TouchableOpacity>
+            </AnimatedPressable>
           ))}
         </View>
       )}
 
       {onOpenChat && (
-        <TouchableOpacity
+        <AnimatedPressable
           style={[styles.actionButton, styles.primaryButton, styles.chatButton]}
           onPress={onOpenChat}
         >
@@ -84,7 +85,7 @@ export default function EventActions({ onAddExpense, onAddParticipant, onOpenCha
           >
             Otwórz czat
           </Text>
-        </TouchableOpacity>
+        </AnimatedPressable>
       )}
     </View>
   );

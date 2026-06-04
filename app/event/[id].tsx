@@ -1,9 +1,9 @@
-import { View, StyleSheet, ScrollView, ActivityIndicator, Dimensions, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert } from 'react-native';
+import EventDetailSkeleton from '@/components/skeletons/EventDetailSkeleton';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
-import { API_ENDPOINTS } from '@/urls/api';
 import { isEventActive } from '@/utils/eventStatus';
 import CreateExpenseModal from '@/components/modals/CreateExpenseModal';
 import EditExpenseModal from '@/components/modals/EditExpenseModal';
@@ -14,60 +14,23 @@ import EventCard from '@/components/events/EventCard';
 import EventActions from '@/components/events/EventActions';
 import ExpensesSection from '@/components/events/ExpensesSection';
 import BalanceButton from '@/components/events/BalanceButton';
-
-interface Event {
-  id: number;
-  name: string;
-  description: string | null;
-  created_by: number;
-  status: string;
-  created_at: string;
-  finished_at: string | null;
-  participants: Array<{
-    id: number;
-    username: string;
-    email: string;
-  }>;
-  creator: {
-    id: number;
-    username: string;
-    email: string;
-  };
-}
-
-interface Expense {
-  id: number;
-  event_id: number;
-  payer_id: number;
-  amount: number;
-  description: string | null;
-  created_at: string;
-  payer: {
-    id: number;
-    username: string;
-    email: string;
-  };
-  participants: Array<{
-    id: number;
-    user_id: number;
-    amount: number;
-    user: {
-      id: number;
-      username: string;
-      email: string;
-    };
-  }>;
-}
+import { useEventDetail } from '@/hooks/events/useEventDetail';
+import { useExpensesByEvent } from '@/hooks/expenses/useExpensesByEvent';
+import { useFinishEvent } from '@/hooks/events/useFinishEvent';
+import { useUploadEventImage } from '@/hooks/media/useUploadEventImage';
+import type { Expense } from '@/types/api';
 
 export default function EventDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { authorizedFetch, userId, loading: authLoading } = useAuth();
+  const { userId } = useAuth();
+  const eventId = id ? parseInt(id, 10) : null;
 
-  const [event, setEvent] = useState<Event | null>(null);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [expensesLoading, setExpensesLoading] = useState(true);
+  const { event, loading } = useEventDetail(eventId);
+  const { expenses, loading: expensesLoading } = useExpensesByEvent(eventId);
+  const { finishEvent, finishing } = useFinishEvent(eventId ?? 0);
+  const { pickAndUpload: pickEventImage, uploading: imageUploading } = useUploadEventImage(eventId ?? 0);
+
   const [showCreateExpenseModal, setShowCreateExpenseModal] = useState(false);
   const [showEditExpenseModal, setShowEditExpenseModal] = useState(false);
   const [showAddParticipantModal, setShowAddParticipantModal] = useState(false);
@@ -75,53 +38,8 @@ export default function EventDetail() {
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [sortBy, setSortBy] = useState<'amount_asc' | 'amount_desc' | 'date_asc' | 'date_desc'>('date_desc');
 
-  useEffect(() => {
-    if (!id || authLoading) return;
-    fetchEvent();
-    fetchExpenses();
-  }, [id, authLoading]);
-
-  const fetchEvent = async () => {
-    if (!id) return;
-
-    setLoading(true);
-    try {
-      const response = await authorizedFetch(API_ENDPOINTS.EVENTS.GET(parseInt(id, 10)));
-
-      if (!response.ok) {
-        throw new Error('Nie udało się pobrać eventu');
-      }
-
-      const data = await response.json();
-      setEvent(data);
-    } catch (error) {
-      console.error('Error fetching event:', error);
-      Alert.alert('Błąd', 'Nie udało się pobrać eventu');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchExpenses = async () => {
-    if (!id) return;
-
-    setExpensesLoading(true);
-    try {
-      const response = await authorizedFetch(API_ENDPOINTS.EXPENSES.GET_BY_EVENT(parseInt(id, 10)));
-
-      if (response.ok) {
-        const data = await response.json();
-        setExpenses(Array.isArray(data) ? data : []);
-      }
-    } catch (error) {
-      console.error('Error fetching expenses:', error);
-    } finally {
-      setExpensesLoading(false);
-    }
-  };
-
-  const handleFinishEvent = async () => {
-    if (!id) return;
+  const handleFinishEvent = () => {
+    if (!eventId) return;
 
     Alert.alert(
       'Zakończ event',
@@ -133,19 +51,11 @@ export default function EventDetail() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const response = await authorizedFetch(API_ENDPOINTS.EVENTS.FINISH(parseInt(id, 10)), {
-                method: 'POST',
-              });
-
-              if (response.ok) {
-                Alert.alert('Sukces', 'Event został zakończony');
-                fetchEvent();
-              } else {
-                const error = await response.json().catch(() => ({ detail: 'Nie udało się zakończyć eventu' }));
-                Alert.alert('Błąd', error.detail || 'Nie udało się zakończyć eventu');
-              }
-            } catch (error) {
-              Alert.alert('Błąd', 'Nie udało się zakończyć eventu');
+              await finishEvent();
+              Alert.alert('Sukces', 'Event został zakończony');
+            } catch (err) {
+              const message = err instanceof Error ? err.message : 'Nie udało się zakończyć eventu';
+              Alert.alert('Błąd', message);
             }
           },
         },
@@ -171,29 +81,10 @@ export default function EventDetail() {
   };
 
   const sortedExpenses = sortExpenses(expenses);
-
   const isCreator = Boolean(event && userId !== null && userId === event.created_by);
 
-  console.log('EventDetail render - loading:', loading, 'event:', !!event, 'id:', id);
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FFB90D" />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (!event) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <ActivityIndicator size="large" color="#FFB90D" />
-        </View>
-      </SafeAreaView>
-    );
+  if (loading || !event) {
+    return <EventDetailSkeleton />;
   }
 
   return (
@@ -204,12 +95,17 @@ export default function EventDetail() {
         showsVerticalScrollIndicator={false}
       >
         <EventHeader
-          onFinishEvent={handleFinishEvent}
+          onFinishEvent={finishing ? () => {} : handleFinishEvent}
           isCreator={isCreator}
           isActive={isEventActive(event.status)}
         />
 
-        <EventCard event={event} />
+        <EventCard
+          event={event}
+          canEditImage={isCreator && isEventActive(event.status)}
+          onChangeImage={isCreator ? () => void pickEventImage() : undefined}
+          imageUploading={imageUploading}
+        />
 
         {isEventActive(event.status) && (
           <EventActions
@@ -248,10 +144,7 @@ export default function EventDetail() {
           <CreateExpenseModal
             visible={showCreateExpenseModal}
             onClose={() => setShowCreateExpenseModal(false)}
-            onExpenseCreated={() => {
-              fetchExpenses();
-              setShowCreateExpenseModal(false);
-            }}
+            onExpenseCreated={() => setShowCreateExpenseModal(false)}
             eventId={event.id}
             participants={event.participants}
             currentUserId={userId}
@@ -263,7 +156,6 @@ export default function EventDetail() {
               setSelectedExpense(null);
             }}
             onExpenseUpdated={() => {
-              fetchExpenses();
               setShowEditExpenseModal(false);
               setSelectedExpense(null);
             }}
@@ -280,10 +172,7 @@ export default function EventDetail() {
           <AddParticipantModal
             visible={showAddParticipantModal}
             onClose={() => setShowAddParticipantModal(false)}
-            onParticipantAdded={() => {
-              fetchEvent();
-              setShowAddParticipantModal(false);
-            }}
+            onParticipantAdded={() => setShowAddParticipantModal(false)}
             eventId={event.id}
             currentParticipants={event.participants}
           />

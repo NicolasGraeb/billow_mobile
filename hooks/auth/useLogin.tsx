@@ -1,6 +1,6 @@
-import { useCallback, useState } from "react";
+import { authApi, validateLoginResponse } from "@/api/auth";
 import { useAuth } from "@/context/AuthContext";
-import { API_ENDPOINTS } from "@/urls/api";
+import { useMutation } from "@tanstack/react-query";
 
 type LoginCredentials = {
   username: string;
@@ -9,56 +9,20 @@ type LoginCredentials = {
 
 export const useLogin = () => {
   const { login } = useAuth();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const signIn = useCallback(
-    async ({ username, password }: LoginCredentials) => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const response = await fetch(API_ENDPOINTS.AUTH.LOGIN, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            username: username.trim(),
-            password: password.trim(),
-          }),
-        });
-
-        if (!response.ok) {
-          let message = `Login failed (${response.status})`;
-          try {
-            const errorData = await response.json();
-            if (typeof errorData?.message === "string" && errorData.message.trim()) {
-              message = errorData.message;
-            }
-          } catch {
-
-          }
-          throw new Error(message);
-        }
-
-        const data = await response.json();
-        if (!data?.access_token || !data?.refresh_token) {
-          throw new Error("Invalid login response: missing tokens");
-        }
-
-        await login(data.access_token, data.refresh_token);
-        return data;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Unexpected login error";
-        setError(message);
-        throw err;
-      } finally {
-        setLoading(false);
-      }
+  const mutation = useMutation({
+    mutationFn: async ({ username, password }: LoginCredentials) => {
+      const data = await authApi.login({ username, password });
+      validateLoginResponse(data);
+      console.log(data.access_token);
+      await login(data.access_token, data.refresh_token);
+      return data;
     },
-    [login]
-  );
+  });
 
-  return { signIn, loading, error };
+  return {
+    signIn: mutation.mutateAsync,
+    loading: mutation.isPending,
+    error: mutation.error instanceof Error ? mutation.error.message : null,
+  };
 };

@@ -9,16 +9,15 @@ import {
   Platform,
   NativeSyntheticEvent,
   NativeScrollEvent,
-  LayoutAnimation,
-  UIManager,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Client } from '@stomp/stompjs';
 
-import { API_ENDPOINTS } from '@/urls/api';
+import { chatApi, normalizeChatMessage } from '@/api/chat';
 import { useAuth } from '@/context/AuthContext';
+import { useAuthorizedApi } from '@/hooks/useAuthorizedApi';
+import { API_ENDPOINTS } from '@/urls/api';
 import { ChatInputBar } from './chat/ChatInputBar';
-import { ChatMessageItem } from './chat/ChatMessageItem';
+import ChatMessageItem from './chat/ChatMessageItem';
 import EmojiPicker from './chat/EmojiPicker';
 import type { ChatMessage } from './chat/types';
 import { compareMessages } from './chat/utils';
@@ -31,9 +30,11 @@ interface EventChatProps {
 const PAGE_SIZE = 30;
 const DEFAULT_INPUT_HEIGHT = 72;
 const HEADER_HEIGHT = 46;
+const WS_RECONNECT_MS = 3000;
 
 export default function EventChat({ eventId, currentUserId }: EventChatProps) {
-  const { authorizedFetch, accessToken } = useAuth();
+  const { accessToken } = useAuth();
+  const { fetch: authorizedFetch } = useAuthorizedApi();
   const insets = useSafeAreaInsets();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -45,25 +46,14 @@ export default function EventChat({ eventId, currentUserId }: EventChatProps) {
   const [inputAreaHeight, setInputAreaHeight] = useState(DEFAULT_INPUT_HEIGHT);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
-  const stompClientRef = useRef<Client | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const reachedStartRef = useRef(false);
-
-  useEffect(() => {
-    if (Platform.OS === 'android') {
-      try {
-        if (typeof UIManager.setLayoutAnimationEnabledExperimental === 'function') {
-          UIManager.setLayoutAnimationEnabledExperimental(true);
-        }
-      } catch (err) {
-        // no-op
-      }
-    }
-  }, []);
+  const shouldReconnectRef = useRef(true);
 
   const appendMessages = (incoming: ChatMessage | ChatMessage[], appendToTop = false) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setMessages((prev) => {
       const existingIds = new Set(prev.map((msg) => msg.id));
       const merged = [...prev];
@@ -86,18 +76,6 @@ export default function EventChat({ eventId, currentUserId }: EventChatProps) {
     }
   };
 
-  const normalizeMessage = (m: Record<string, unknown>): ChatMessage => ({
-    id: Number(m.id),
-    event_id: Number(m.event_id ?? m.eventId),
-    sender: {
-      id: Number((m.sender as Record<string, unknown>)?.id),
-      username: String((m.sender as Record<string, unknown>)?.username ?? ''),
-      email: String((m.sender as Record<string, unknown>)?.email ?? ''),
-    },
-    content: String(m.content ?? ''),
-    created_at: String(m.created_at ?? m.createdAt ?? ''),
-  });
-
   const fetchMessages = async (options?: { beforeId?: number; appendToTop?: boolean }) => {
     try {
       if (options?.appendToTop) {
@@ -106,26 +84,16 @@ export default function EventChat({ eventId, currentUserId }: EventChatProps) {
         setLoading(true);
       }
 
-      const params = new URLSearchParams();
-      if (options?.beforeId) {
-        params.append('before_id', String(options.beforeId));
+      const normalized = await chatApi.getMessages(authorizedFetch, eventId, {
+        beforeId: options?.beforeId,
+        limit: PAGE_SIZE,
+      });
+
+      if (normalized.length === 0 && options?.appendToTop) {
+        reachedStartRef.current = true;
       }
-      params.append('limit', String(PAGE_SIZE));
-
-      const endpoint = `${API_ENDPOINTS.EVENTS.CHAT_MESSAGES(eventId)}${params.toString() ? `?${params.toString()}` : ''}`;
-      const response = await authorizedFetch(endpoint);
-
-      if (response.ok) {
-        const data: ChatMessage[] = await response.json();
-        const normalized = Array.isArray(data) ? data.map((m) => normalizeMessage(m as unknown as Record<string, unknown>)) : [];
-        if (normalized.length === 0 && options?.appendToTop) {
-          reachedStartRef.current = true;
-        }
-        if (normalized.length > 0) {
-          appendMessages(normalized, options?.appendToTop ?? false);
-        }
-      } else {
-        console.warn('[EventChat] history fetch failed', response.status);
+      if (normalized.length > 0) {
+        appendMessages(normalized, options?.appendToTop ?? false);
       }
     } catch (err) {
       console.error('[EventChat] fetchMessages error', err);
@@ -147,92 +115,100 @@ export default function EventChat({ eventId, currentUserId }: EventChatProps) {
     });
   };
 
-  const setupHeartbeat = () => {
+  const clearHeartbeat = () => {
     if (heartbeatRef.current) {
       clearInterval(heartbeatRef.current);
+      heartbeatRef.current = null;
     }
+  };
+
+  const setupHeartbeat = () => {
+    clearHeartbeat();
     heartbeatRef.current = setInterval(() => {
-      if (stompClientRef.current?.connected) {
-        stompClientRef.current.publish({
-          destination: `/app/events/${eventId}/chat`,
-          body: JSON.stringify({ type: 'ping' }),
-        });
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'ping' }));
       }
     }, 25000);
   };
 
-  const connectStomp = () => {
+  const handleWsMessage = (raw: string) => {
+    try {
+      const payload = JSON.parse(raw) as Record<string, unknown>;
+      if (payload.type === 'history') {
+        return;
+      }
+      if (payload.type === 'message' && payload.message) {
+        appendMessages(
+          normalizeChatMessage(payload.message as Record<string, unknown>)
+        );
+      }
+    } catch (err) {
+      console.error('[EventChat] parse message error', err);
+    }
+  };
+
+  const connectWebSocket = () => {
     if (!accessToken) return;
 
-    const wsUrl = API_ENDPOINTS.EVENTS.CHAT_STOMP_WS(accessToken);
-
-    const client = new Client({
-      webSocketFactory: () => new WebSocket(wsUrl),
-      connectHeaders: {},
-      debug: () => {},
-      reconnectDelay: 3000,
-      heartbeatIncoming: 0,
-      heartbeatOutgoing: 20000,
-      onConnect: () => {
-        setConnecting(false);
-        setupHeartbeat();
-
-        client.subscribe(`/topic/events/${eventId}/chat`, (message) => {
-          try {
-            const payload = JSON.parse(message.body);
-            if (payload.type === 'history') {
-              const history: unknown[] = payload.messages ?? [];
-              if (history.length > 0) {
-                const normalized = history.map((m) => normalizeMessage(m as Record<string, unknown>));
-                appendMessages(normalized, true);
-              }
-            } else if (payload.type === 'message' && payload.message) {
-              appendMessages(normalizeMessage(payload.message as Record<string, unknown>));
-            }
-          } catch (err) {
-            console.error('[EventChat] parse message error', err);
-          }
-        });
-      },
-      onStompError: (frame) => {
-        console.error('[EventChat] STOMP error', frame.headers?.message ?? frame.body);
-        setConnecting(false);
-      },
-      onWebSocketClose: () => {
-        setConnecting(false);
-        if (heartbeatRef.current) {
-          clearInterval(heartbeatRef.current);
-        }
-      },
-    });
-
-    stompClientRef.current = client;
+    const wsUrl = API_ENDPOINTS.EVENTS.CHAT_WEBSOCKET(eventId, accessToken);
     setConnecting(true);
-    client.activate();
+
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      setConnecting(false);
+      setupHeartbeat();
+    };
+
+    ws.onmessage = (event) => {
+      const data = typeof event.data === 'string' ? event.data : String(event.data);
+      handleWsMessage(data);
+    };
+
+    ws.onerror = () => {
+      console.error('[EventChat] WebSocket error');
+      setConnecting(false);
+    };
+
+    ws.onclose = () => {
+      setConnecting(false);
+      clearHeartbeat();
+      wsRef.current = null;
+      if (!shouldReconnectRef.current) return;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+      }
+      reconnectTimerRef.current = setTimeout(() => {
+        if (shouldReconnectRef.current && accessToken) {
+          connectWebSocket();
+        }
+      }, WS_RECONNECT_MS);
+    };
   };
 
   useEffect(() => {
-    fetchInitialMessages().then(() => connectStomp());
+    shouldReconnectRef.current = true;
+    fetchInitialMessages().then(() => connectWebSocket());
     return () => {
-      if (heartbeatRef.current) {
-        clearInterval(heartbeatRef.current);
+      shouldReconnectRef.current = false;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
       }
-      stompClientRef.current?.deactivate?.();
-      stompClientRef.current = null;
+      clearHeartbeat();
+      wsRef.current?.close();
+      wsRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId, accessToken]);
 
   const handleSend = () => {
     const trimmed = input.trim();
-    const client = stompClientRef.current;
-    if (!trimmed || !client?.connected) {
+    const ws = wsRef.current;
+    if (!trimmed || ws?.readyState !== WebSocket.OPEN) {
       return;
     }
-    client.publish({
-      destination: `/app/events/${eventId}/chat`,
-      body: JSON.stringify({ content: trimmed }),
-    });
+    ws.send(JSON.stringify({ content: trimmed }));
     setInput('');
     setShowEmojiPicker(false);
     setAutoScroll(true);
@@ -261,7 +237,7 @@ export default function EventChat({ eventId, currentUserId }: EventChatProps) {
     setAutoScroll(distanceFromBottom < 48);
   };
 
-  const canSend = !!input.trim() && !!stompClientRef.current?.connected;
+  const canSend = !!input.trim() && wsRef.current?.readyState === WebSocket.OPEN;
 
   return (
     <SafeAreaView style={styles.root}>

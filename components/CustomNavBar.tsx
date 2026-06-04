@@ -15,7 +15,8 @@ const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpaci
 
 const PRIMARY_COLOR = '#FFB90D';
 const SECONDARY_COLOR = '#6E7A94';
-const BACKGROUND_COLOR = 'rgba(10,9,6,0.5)';
+
+const TAB_LAYOUT = LinearTransition.springify().mass(0.8);
 
 const CustomNavBar: React.FC<BottomTabBarProps> = ({
   state,
@@ -24,11 +25,10 @@ const CustomNavBar: React.FC<BottomTabBarProps> = ({
 }) => {
   const insets = useSafeAreaInsets();
   const { width } = Dimensions.get('window');
-  
-  // Responsive calculations
+
   const isSmallScreen = width < 375;
   const isLargeScreen = width > 414;
-  
+
   const containerStyle = [
     styles.container,
     {
@@ -36,26 +36,19 @@ const CustomNavBar: React.FC<BottomTabBarProps> = ({
       height: isSmallScreen ? 55 : isLargeScreen ? 65 : 60,
       left: isSmallScreen ? 40 : 60,
       right: isSmallScreen ? 40 : 60,
-    }
+    },
   ];
 
   return (
     <View style={containerStyle}>
-      {/* Blur background */}
-      <BlurView
-        intensity={15}
-        tint="light"
-        style={StyleSheet.absoluteFill}
-      />
-      
-      {/* Semi-transparent overlay */}
+      <BlurView intensity={15} tint="light" style={StyleSheet.absoluteFill} />
+
       <View
         style={[
           StyleSheet.absoluteFill,
           {
-            backgroundColor: Platform.OS === 'android' 
-              ? 'rgba(10,9,6,0.95)'
-              : 'rgba(10,9,6,0.92)',
+            backgroundColor:
+              Platform.OS === 'android' ? 'rgba(10,9,6,0.95)' : 'rgba(10,9,6,0.92)',
           },
         ]}
       />
@@ -68,11 +61,10 @@ const CustomNavBar: React.FC<BottomTabBarProps> = ({
         pointerEvents="none"
       />
 
-      {/* Glass border */}
       <View
         pointerEvents="none"
         style={[
-          StyleSheet.absoluteFillObject,
+          StyleSheet.absoluteFill,
           {
             borderWidth: 1,
             borderColor: 'rgba(255,255,255,0.08)',
@@ -81,14 +73,15 @@ const CustomNavBar: React.FC<BottomTabBarProps> = ({
         ]}
       />
 
-      {/* Tab buttons */}
-      <View style={[
-        styles.tabsContainer,
-        {
-          paddingHorizontal: isSmallScreen ? 20 : 25,
-          gap: isSmallScreen ? 12 : 16,
-        }
-      ]}>
+      <View
+        style={[
+          styles.tabsContainer,
+          {
+            paddingHorizontal: isSmallScreen ? 20 : 25,
+            gap: isSmallScreen ? 12 : 16,
+          },
+        ]}
+      >
         {state.routes.map((route, index) => {
           if (['_sitemap', '+not-found'].includes(route.name)) return null;
 
@@ -97,8 +90,8 @@ const CustomNavBar: React.FC<BottomTabBarProps> = ({
             options.tabBarLabel !== undefined
               ? options.tabBarLabel
               : options.title !== undefined
-              ? options.title
-              : route.name;
+                ? options.title
+                : route.name;
 
           const isFocused = state.index === index;
 
@@ -116,7 +109,7 @@ const CustomNavBar: React.FC<BottomTabBarProps> = ({
 
           return (
             <AnimatedTouchableOpacity
-              layout={LinearTransition.springify().mass(0.8)}
+              layout={TAB_LAYOUT}
               key={route.key}
               onPress={onPress}
               style={[
@@ -126,13 +119,13 @@ const CustomNavBar: React.FC<BottomTabBarProps> = ({
                   height: isSmallScreen ? 40 : isLargeScreen ? 48 : 44,
                   paddingHorizontal: isSmallScreen ? 16 : 20,
                   borderRadius: isSmallScreen ? 20 : isLargeScreen ? 24 : 22,
-                }
+                },
               ]}
             >
               {getIconByRouteName(
                 route.name,
                 isFocused ? PRIMARY_COLOR : SECONDARY_COLOR,
-                isSmallScreen ? 18 : isLargeScreen ? 22 : 20
+                isSmallScreen ? 18 : isLargeScreen ? 22 : 20,
               )}
               {isFocused && (
                 <Animated.Text
@@ -143,7 +136,7 @@ const CustomNavBar: React.FC<BottomTabBarProps> = ({
                     {
                       fontSize: isSmallScreen ? 11 : 12,
                       marginLeft: isSmallScreen ? 4 : 6,
-                    }
+                    },
                   ]}
                 >
                   {label as string}

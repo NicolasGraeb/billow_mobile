@@ -1,5 +1,7 @@
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import Skeleton from '@/components/common/Skeleton';
 import { Ionicons } from '@expo/vector-icons';
+import AnimatedPressable from '@/components/common/AnimatedPressable';
 import ExpenseCard from './ExpenseCard';
 
 interface Expense {
@@ -61,7 +63,7 @@ export default function ExpensesSection({
         </Text>
         {expenses.length > 0 && (
           <View style={styles.sortButtons}>
-            <TouchableOpacity
+            <AnimatedPressable
               style={[
                 styles.sortButton,
                 (sortBy === 'amount_asc' || sortBy === 'amount_desc') && styles.sortButtonActive,
@@ -83,8 +85,8 @@ export default function ExpensesSection({
               ]}>
                 Kwota
               </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
+            </AnimatedPressable>
+            <AnimatedPressable
               style={[
                 styles.sortButton,
                 (sortBy === 'date_asc' || sortBy === 'date_desc') && styles.sortButtonActive,
@@ -106,13 +108,21 @@ export default function ExpensesSection({
               ]}>
                 Data
               </Text>
-            </TouchableOpacity>
+            </AnimatedPressable>
           </View>
         )}
       </View>
       {expensesLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="small" color="#FFB90D" />
+        <View style={styles.expensesList}>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <View key={i} style={styles.expenseSkeleton}>
+              <Skeleton width={48} height={48} borderRadius={24} />
+              <View style={styles.expenseSkeletonLines}>
+                <Skeleton height={18} borderRadius={6} style={{ width: '40%' }} />
+                <Skeleton height={14} borderRadius={6} style={{ width: '65%' }} />
+              </View>
+            </View>
+          ))}
         </View>
       ) : expenses.length === 0 ? (
         <View style={styles.emptyContainer}>
@@ -176,9 +186,17 @@ const styles = StyleSheet.create({
   sortButtonTextActive: {
     color: '#FFFFFF',
   },
-  loadingContainer: {
-    paddingVertical: 40,
+  expenseSkeleton: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  expenseSkeletonLines: {
+    flex: 1,
+    gap: 8,
   },
   emptyContainer: {
     paddingVertical: 40,

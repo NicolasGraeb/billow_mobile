@@ -1,70 +1,11 @@
-import { View, Text, StyleSheet, Modal, TouchableOpacity, FlatList, Dimensions, ActivityIndicator } from 'react-native';
-import { useState, useEffect, useMemo } from 'react';
+import { View, Text, StyleSheet, Modal, FlatList, Dimensions } from 'react-native';
+import { useMemo } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '@/context/AuthContext';
-import { API_ENDPOINTS } from '@/urls/api';
 import ModalHeader from '@/components/common/ModalHeader';
 import LoadingIndicator from '@/components/common/LoadingIndicator';
 import EmptyState from '@/components/common/EmptyState';
-
-interface BalanceEntry {
-  from_user_id: number;
-  to_user_id: number;
-  amount: number;
-  from_user: {
-    id: number;
-    username: string;
-    email: string;
-  };
-  to_user: {
-    id: number;
-    username: string;
-    email: string;
-  };
-}
-
-interface EventBalance {
-  event_id: number;
-  balances: BalanceEntry[];
-  summary: Record<string, number>;
-}
-
-/** Backend (Jackson) zwraca camelCase: fromUser, toUser, fromUserId — mobile wcześniej zakładał snake_case. */
-function normalizeBalancePayload(raw: unknown): EventBalance | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const d = raw as Record<string, unknown>;
-
-  const summary = d.summary;
-  const mapSummary: Record<string, number> =
-    summary && typeof summary === 'object' && !Array.isArray(summary)
-      ? Object.fromEntries(
-          Object.entries(summary as Record<string, unknown>).map(([k, v]) => [k, typeof v === 'number' ? v : Number(v)])
-        )
-      : {};
-
-  const balancesRaw = d.balances;
-  const list = Array.isArray(balancesRaw) ? balancesRaw : [];
-
-  const balances: BalanceEntry[] = list.map((entry: unknown) => {
-    const e = entry as Record<string, unknown>;
-    const fromUser = (e.from_user ?? e.fromUser) as BalanceEntry['from_user'] | undefined;
-    const toUser = (e.to_user ?? e.toUser) as BalanceEntry['to_user'] | undefined;
-    const amount = typeof e.amount === 'number' ? e.amount : Number(e.amount ?? 0);
-    return {
-      from_user_id: Number(e.from_user_id ?? e.fromUserId ?? 0),
-      to_user_id: Number(e.to_user_id ?? e.toUserId ?? 0),
-      amount,
-      from_user: fromUser ?? { id: 0, username: '?', email: '' },
-      to_user: toUser ?? { id: 0, username: '?', email: '' },
-    };
-  });
-
-  return {
-    event_id: Number(d.event_id ?? d.eventId ?? 0),
-    balances,
-    summary: mapSummary,
-  };
-}
+import { useEventBalance } from '@/hooks/expenses/useEventBalance';
+import type { BalanceEntry } from '@/types/api';
 
 interface BalanceParticipant {
   id: number;
@@ -75,17 +16,14 @@ interface BalanceModalProps {
   visible: boolean;
   onClose: () => void;
   eventId: number;
-  /** Do mapowania salda (klucze w summary to userId z backendu). */
   participants?: BalanceParticipant[];
 }
 
 export default function BalanceModal({ visible, onClose, eventId, participants = [] }: BalanceModalProps) {
   const { width } = Dimensions.get('window');
   const isSmallScreen = width < 375;
-  const { authorizedFetch } = useAuth();
 
-  const [balance, setBalance] = useState<EventBalance | null>(null);
-  const [loading, setLoading] = useState(false);
+  const { balance, loading } = useEventBalance(eventId, visible);
 
   const usernameByUserId = useMemo(() => {
     const m = new Map<string, string>();
@@ -93,32 +31,6 @@ export default function BalanceModal({ visible, onClose, eventId, participants =
     return m;
   }, [participants]);
 
-  useEffect(() => {
-    if (visible && eventId) {
-      fetchBalance();
-    }
-  }, [visible, eventId]);
-
-  const fetchBalance = async () => {
-    setLoading(true);
-    try {
-      const response = await authorizedFetch(API_ENDPOINTS.EXPENSES.BALANCE(eventId));
-
-      if (response.ok) {
-        const data = await response.json();
-        setBalance(normalizeBalancePayload(data));
-      }
-    } catch (error) {
-      console.error('Error fetching balance:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /**
-   * Backend: fromUserId = wierzyciel (+saldo), toUserId = dłużnik (−saldo).
-   * Przelew: TO płaci FROM kwotę — strzałka: płatnik → odbiorca.
-   */
   const renderBalanceItem = ({ item }: { item: BalanceEntry }) => {
     const payer = item.to_user;
     const receiver = item.from_user;
@@ -356,5 +268,3 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
-
-

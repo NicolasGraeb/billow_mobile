@@ -1,20 +1,16 @@
-import { View, Text, StyleSheet, Platform, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Platform, Dimensions } from 'react-native';
+import AnimatedPressable from '@/components/common/AnimatedPressable';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState, useMemo } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import EventCoverImage from '@/components/events/EventCoverImage';
+import Skeleton from '@/components/common/Skeleton';
 import { isEventActive, isEventFinished } from '@/utils/eventStatus';
+import type { EventSummary } from '@/types/api';
 
-interface Event {
-  id: number;
-  name: string;
-  description: string | null;
-  created_at: string;
-  finished_at: string | null;
-  status: string;
-  created_by: number;
-}
+type Event = EventSummary;
 
 interface EventListProps {
   events: Event[];
@@ -87,6 +83,14 @@ export default function EventList({ events, loading }: EventListProps) {
         padding: isSmallScreen ? 10 : 12,
       },
     ]}>
+      <View style={styles.thumb}>
+        <EventCoverImage
+          imageUrl={item.image_url}
+          height={56}
+          borderRadius={12}
+          variant="thumb"
+        />
+      </View>
       <View style={styles.eventContent}>
         <Text 
           style={[
@@ -190,7 +194,7 @@ export default function EventList({ events, loading }: EventListProps) {
 
       <View style={[contentStyle, { flex: 1 }]}>
         <View style={styles.filterContainer}>
-          <TouchableOpacity
+          <View
             style={[
               styles.datePickerButton,
               {
@@ -199,41 +203,43 @@ export default function EventList({ events, loading }: EventListProps) {
                 maxWidth: width - (isSmallScreen ? 64 : 80),
               },
             ]}
-            onPress={() => setShowDatePicker(true)}
           >
-            <Ionicons 
-              name="calendar-outline" 
-              size={isSmallScreen ? 16 : 18} 
-              color="#FFB90D" 
-            />
-            <Text 
-              style={[
-                styles.datePickerText,
-                {
-                  fontSize: isSmallScreen ? 13 : 14,
-                },
-              ]}
-              numberOfLines={1}
-              ellipsizeMode="tail"
+            <AnimatedPressable
+              style={styles.datePickerPressable}
+              onPress={() => setShowDatePicker(true)}
             >
-              {formatSelectedDate()}
-            </Text>
-            {selectedDate && (
-              <TouchableOpacity
-                style={styles.clearButton}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  setSelectedDate(null);
-                }}
+              <Ionicons
+                name="calendar-outline"
+                size={isSmallScreen ? 16 : 18}
+                color="#FFB90D"
+              />
+              <Text
+                style={[
+                  styles.datePickerText,
+                  {
+                    fontSize: isSmallScreen ? 13 : 14,
+                  },
+                ]}
+                numberOfLines={1}
+                ellipsizeMode="tail"
               >
-                <Ionicons 
-                  name="close-circle" 
-                  size={isSmallScreen ? 16 : 18} 
-                  color="#6B7280" 
+                {formatSelectedDate()}
+              </Text>
+            </AnimatedPressable>
+            {selectedDate && (
+              <AnimatedPressable
+                style={styles.clearButton}
+                haptic={false}
+                onPress={() => setSelectedDate(null)}
+              >
+                <Ionicons
+                  name="close-circle"
+                  size={isSmallScreen ? 16 : 18}
+                  color="#6B7280"
                 />
-              </TouchableOpacity>
+              </AnimatedPressable>
             )}
-          </TouchableOpacity>
+          </View>
         </View>
 
         {showDatePicker && (
@@ -259,8 +265,16 @@ export default function EventList({ events, loading }: EventListProps) {
         )}
 
         {loading ? (
-          <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Ładowanie...</Text>
+          <View style={styles.eventsList}>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <View key={i} style={[styles.eventItem, styles.skeletonRow]}>
+                <Skeleton width={56} height={56} borderRadius={12} />
+                <View style={styles.skeletonLines}>
+                  <Skeleton height={16} borderRadius={6} style={{ width: '70%' }} />
+                  <Skeleton height={12} borderRadius={6} style={{ width: '45%' }} />
+                </View>
+              </View>
+            ))}
           </View>
         ) : filteredEvents.length === 0 ? (
           <View style={styles.emptyContainer}>
@@ -279,9 +293,7 @@ export default function EventList({ events, loading }: EventListProps) {
         ) : (
           <View style={styles.eventsList}>
             {filteredEvents.map((item) => (
-              <View key={item.id}>
-                {renderEventItem({ item })}
-              </View>
+              <View key={item.id}>{renderEventItem({ item })}</View>
             ))}
           </View>
         )}
@@ -309,6 +321,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     gap: 8,
   },
+  datePickerPressable: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
   datePickerText: {
     color: '#E5E7EB',
     fontWeight: '500',
@@ -322,12 +341,29 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   eventItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderRadius: 12,
     marginBottom: 8,
   },
+  thumb: {
+    width: 56,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
   eventContent: {
+    flex: 1,
     gap: 6,
+    minWidth: 0,
+  },
+  skeletonRow: {
+    padding: 12,
+  },
+  skeletonLines: {
+    flex: 1,
+    gap: 8,
   },
   eventName: {
     color: '#E5E7EB',

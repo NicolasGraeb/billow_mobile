@@ -1,8 +1,5 @@
 import { API_BASE_URL } from "./urls";
 
-/** Base URL for WebSocket (ws/wss). Use for STOMP endpoint /ws */
-export const WS_BASE_URL = API_BASE_URL.replace(/^http/, "ws");
-
 type AuthEndpoints = {
   LOGIN: string;
   REGISTER: string;
@@ -20,7 +17,6 @@ type EventEndpoints = {
   REMOVE_PARTICIPANT: (eventId: number, userId: number) => string;
   CHAT_MESSAGES: (eventId: number) => string;
   CHAT_WEBSOCKET: (eventId: number, token: string) => string;
-  CHAT_STOMP_WS: (token: string) => string;
 };
 
 type ExpenseEndpoints = {
@@ -33,6 +29,11 @@ type ExpenseEndpoints = {
 
 type UserEndpoints = {
   SEARCH: string;
+  AVATAR: string;
+};
+
+type EventImageEndpoints = {
+  IMAGE: (eventId: number) => string;
 };
 
 type FriendsEndpoints = {
@@ -51,6 +52,7 @@ type ApiEndpoints = {
   EXPENSES: ExpenseEndpoints;
   USERS: UserEndpoints;
   FRIENDS: FriendsEndpoints;
+  MEDIA: EventImageEndpoints;
 };
 
 export const API_ENDPOINTS: ApiEndpoints = {
@@ -63,7 +65,6 @@ export const API_ENDPOINTS: ApiEndpoints = {
   EVENTS: {
     ME: `${API_BASE_URL}/events/me`,
     ACTIVE: `${API_BASE_URL}/events/me/active`,
-    /** Bez końcowego "/" — inaczej Spring robi redirect, a fetch często gubi nagłówek Authorization → 401 Unauthorized */
     CREATE: `${API_BASE_URL}/events`,
     GET: (eventId: number) => `${API_BASE_URL}/events/${eventId}`,
     FINISH: (eventId: number) => `${API_BASE_URL}/events/${eventId}/finish`,
@@ -71,7 +72,6 @@ export const API_ENDPOINTS: ApiEndpoints = {
     REMOVE_PARTICIPANT: (eventId: number, userId: number) => `${API_BASE_URL}/events/${eventId}/participants/${userId}`,
     CHAT_MESSAGES: (eventId: number) => `${API_BASE_URL}/events/${eventId}/chat/messages`,
     CHAT_WEBSOCKET: (eventId: number, token: string) => `${API_BASE_URL.replace(/^http/, "ws")}/events/${eventId}/chat/ws?token=${encodeURIComponent(token)}`,
-    CHAT_STOMP_WS: (token: string) => `${WS_BASE_URL}/ws?token=${encodeURIComponent(token)}`,
   },
   EXPENSES: {
     CREATE: `${API_BASE_URL}/expenses`,
@@ -82,6 +82,10 @@ export const API_ENDPOINTS: ApiEndpoints = {
   },
   USERS: {
     SEARCH: `${API_BASE_URL}/users/search`,
+    AVATAR: `${API_BASE_URL}/users/me/avatar`,
+  },
+  MEDIA: {
+    IMAGE: (eventId: number) => `${API_BASE_URL}/events/${eventId}/image`,
   },
   FRIENDS: {
     LIST: `${API_BASE_URL}/friends`,

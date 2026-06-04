@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import UserAvatar from '@/components/common/UserAvatar';
 
 import type { ChatMessage } from './types';
 
@@ -11,13 +12,11 @@ interface ChatMessageItemProps {
 function ChatMessageItemComponent({ message, isOwn }: ChatMessageItemProps) {
   return (
     <View style={[styles.wrapper, isOwn ? styles.wrapperOwn : styles.wrapperOther]}>
-      <View style={[styles.avatar, isOwn ? styles.avatarOwn : styles.avatarOther]}>
-        <Text style={styles.avatarText}>
-          {message.sender.username ? message.sender.username.charAt(0).toUpperCase() : '?'}
-        </Text>
-      </View>
+      <UserAvatar size={32} imageUrl={message.sender.avatar_url} showMargin={false} />
       <View style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther]}>
-        <Text style={[styles.sender, isOwn ? styles.senderOwn : styles.senderOther]}>{message.sender.username}</Text>
+        <Text style={[styles.sender, isOwn ? styles.senderOwn : styles.senderOther]}>
+          {message.sender.username}
+        </Text>
         <Text style={styles.content}>{message.content}</Text>
         <Text style={styles.timestamp}>
           {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -40,61 +39,41 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     alignSelf: 'flex-end',
   },
-  avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarOwn: {
-    backgroundColor: 'rgba(255, 185, 13, 0.3)',
-  },
-  avatarOther: {
-    backgroundColor: 'rgba(107, 114, 128, 0.3)',
-  },
-  avatarText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 14,
-  },
   bubble: {
-    maxWidth: '75%',
-    borderRadius: 14,
+    maxWidth: '78%',
+    borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 10,
     gap: 4,
   },
   bubbleOwn: {
-    backgroundColor: '#FFB90D',
-    borderTopRightRadius: 4,
+    backgroundColor: 'rgba(255, 185, 13, 0.22)',
+    borderBottomRightRadius: 4,
   },
   bubbleOther: {
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderTopLeftRadius: 4,
+    borderBottomLeftRadius: 4,
   },
   sender: {
-    fontWeight: '600',
     fontSize: 12,
+    fontWeight: '700',
   },
   senderOwn: {
-    color: 'rgba(255,255,255,0.9)',
-    textAlign: 'right',
+    color: '#FFB90D',
   },
   senderOther: {
     color: '#A7B0C0',
   },
   content: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    lineHeight: 18,
+    color: '#E5E7EB',
+    fontSize: 15,
+    lineHeight: 20,
   },
   timestamp: {
-    fontSize: 11,
-    color: 'rgba(229, 231, 235, 0.7)',
-    textAlign: 'right',
+    color: 'rgba(255, 255, 255, 0.35)',
+    fontSize: 10,
+    alignSelf: 'flex-end',
   },
 });
 
-export const ChatMessageItem = memo(ChatMessageItemComponent);
-
+export default memo(ChatMessageItemComponent);

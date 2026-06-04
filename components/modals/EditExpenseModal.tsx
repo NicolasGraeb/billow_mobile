@@ -1,41 +1,12 @@
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, FlatList, Dimensions, ActivityIndicator, Alert, ScrollView } from 'react-native';
 import { useState, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '@/context/AuthContext';
-import { API_ENDPOINTS } from '@/urls/api';
 import ModalHeader from '@/components/common/ModalHeader';
+import { useDeleteExpense } from '@/hooks/expenses/useDeleteExpense';
+import { useUpdateExpense } from '@/hooks/expenses/useUpdateExpense';
+import type { Expense, ExpenseParticipant, UserSummary } from '@/types/api';
 
-interface Participant {
-  id: number;
-  username: string;
-  email: string;
-}
-
-interface ExpenseParticipant {
-  id: number;
-  user_id: number;
-  amount: number;
-  user: {
-    id: number;
-    username: string;
-    email: string;
-  };
-}
-
-interface Expense {
-  id: number;
-  event_id: number;
-  payer_id: number;
-  amount: number;
-  description: string | null;
-  created_at: string;
-  payer: {
-    id: number;
-    username: string;
-    email: string;
-  };
-  participants: ExpenseParticipant[];
-}
+type Participant = UserSummary;
 
 interface EditExpenseModalProps {
   visible: boolean;
@@ -51,7 +22,7 @@ interface ParticipantSplit {
   user_id: number;
   amount: number;
   selected: boolean;
-  displayValue?: string; // Przechowuje surową wartość podczas edycji
+  displayValue?: string;
 }
 
 export default function EditExpenseModal({
@@ -65,23 +36,21 @@ export default function EditExpenseModal({
 }: EditExpenseModalProps) {
   const { width } = Dimensions.get('window');
   const isSmallScreen = width < 375;
-  const { authorizedFetch } = useAuth();
+  const eventId = expense?.event_id ?? 0;
+  const { updateExpense, updating } = useUpdateExpense(eventId);
+  const { deleteExpense, deleting } = useDeleteExpense(eventId);
 
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [payerId, setPayerId] = useState<number>(currentUserId);
   const [participantSplits, setParticipantSplits] = useState<ParticipantSplit[]>([]);
   const [splitType, setSplitType] = useState<'equal' | 'custom'>('equal');
-  const [updating, setUpdating] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-
   useEffect(() => {
     if (visible && expense) {
       setAmount(expense.amount.toString());
       setDescription(expense.description || '');
       setPayerId(expense.payer_id);
       
-      // Inicjalizuj participant splits na podstawie istniejącego wydatku
       const splits: ParticipantSplit[] = participants.map((p) => {
         const existingParticipant = expense.participants.find(ep => ep.user_id === p.id);
         return {
@@ -93,7 +62,6 @@ export default function EditExpenseModal({
       });
       setParticipantSplits(splits);
       
-      // Sprawdź czy wszystkie kwoty są równe (dla równomiernego podziału)
       const selectedSplits = splits.filter(s => s.selected);
       if (selectedSplits.length > 0) {
         const firstAmount = selectedSplits[0].amount;
@@ -114,7 +82,7 @@ export default function EditExpenseModal({
           participantSplits.map((p) => ({
             ...p,
             amount: p.selected ? equalAmount : 0,
-            displayValue: undefined, // Reset display value dla równomiernego podziału
+            displayValue: undefined,
           }))
         );
       }
@@ -130,19 +98,15 @@ export default function EditExpenseModal({
   };
 
   const formatAmountInput = (value: string): string => {
-    // Usuń wszystkie znaki oprócz cyfr, kropki i przecinka
     let cleaned = value.replace(/[^\d.,]/g, '');
     
-    // Zamień przecinek na kropkę
     cleaned = cleaned.replace(',', '.');
     
-    // Pozwól tylko na jedną kropkę
     const parts = cleaned.split('.');
     if (parts.length > 2) {
       cleaned = parts[0] + '.' + parts.slice(1).join('');
     }
     
-    // Ogranicz do 2 miejsc po przecinku
     if (parts.length === 2 && parts[1].length > 2) {
       cleaned = parts[0] + '.' + parts[1].substring(0, 2);
     }
@@ -187,11 +151,10 @@ export default function EditExpenseModal({
       return;
     }
 
-    setUpdating(true);
     try {
-      const response = await authorizedFetch(API_ENDPOINTS.EXPENSES.UPDATE(expense.id), {
-        method: 'PUT',
-        body: JSON.stringify({
+      await updateExpense({
+        expenseId: expense.id,
+        payload: {
           amount: parseFloat(amount),
           description: description.trim() || null,
           payer_id: payerId,
@@ -199,22 +162,14 @@ export default function EditExpenseModal({
             user_id: p.user_id,
             amount: p.amount,
           })),
-        }),
+        },
       });
 
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ detail: 'Nie udało się zaktualizować wydatku' }));
-        throw new Error(error.detail || 'Nie udało się zaktualizować wydatku');
-      }
-
-      if (onExpenseUpdated) {
-        onExpenseUpdated();
-      }
+      onExpenseUpdated?.();
       onClose();
-    } catch (error: any) {
-      Alert.alert('Błąd', error.message || 'Nie udało się zaktualizować wydatku');
-    } finally {
-      setUpdating(false);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Nie udało się zaktualizować wydatku';
+      Alert.alert('Błąd', message);
     }
   };
 
@@ -230,25 +185,13 @@ export default function EditExpenseModal({
           text: 'Usuń',
           style: 'destructive',
           onPress: async () => {
-            setDeleting(true);
             try {
-              const response = await authorizedFetch(API_ENDPOINTS.EXPENSES.DELETE(expense.id), {
-                method: 'DELETE',
-              });
-
-              if (!response.ok) {
-                const error = await response.json().catch(() => ({ detail: 'Nie udało się usunąć wydatku' }));
-                throw new Error(error.detail || 'Nie udało się usunąć wydatku');
-              }
-
-              if (onExpenseUpdated) {
-                onExpenseUpdated();
-              }
+              await deleteExpense(expense.id);
+              onExpenseUpdated?.();
               onClose();
-            } catch (error: any) {
-              Alert.alert('Błąd', error.message || 'Nie udało się usunąć wydatku');
-            } finally {
-              setDeleting(false);
+            } catch (error: unknown) {
+              const message = error instanceof Error ? error.message : 'Nie udało się usunąć wydatku';
+              Alert.alert('Błąd', message);
             }
           },
         },
