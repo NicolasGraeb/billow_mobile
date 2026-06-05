@@ -233,7 +233,7 @@ billow_mobile/
 Adres API backendu ustawiasz w pliku `urls/urls.ts`:
 
 ```typescript
-export const API_BASE_URL = "http://192.168.1.167:8082";
+export const API_BASE_URL = "http://192.168.1.17:8082";
 ```
 
 Zmień adres IP na adres komputera, na którym działa backend (w sieci lokalnej) lub na URL produkcyjny.
@@ -250,6 +250,9 @@ npm install
 
 # Uruchomienie serwera deweloperskiego Expo
 npm start
+
+#ewentualnie można uruchomić tą komendę i po jej włączeniu wpisać 'a'
+npx expo start
 
 # Uruchomienie na Androidzie (natywny build)
 npm run android
