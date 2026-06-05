@@ -5,6 +5,8 @@ node_modules/
 .vscode
 .idea
 .idea/
+.vscode
+.idea/
 # Expo
 .expo/
 dist/
