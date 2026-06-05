@@ -1,6 +1,6 @@
 # Billow Mobile
 
-Aplikacja mobilna **Billow** — narzędzie do wspólnego rozliczania wydatków w grupie. Użytkownicy tworzą eventy (np. wyjazd, impreza, wspólne zakupy), dodają wydatki, dzielą koszty między uczestników i widzą kto komu ile jest winien. Aplikacja komunikuje się z backendem **billow_backend** przez REST API i WebSocket.
+Aplikacja mobilna **Billow** - narzędzie do wspólnego rozliczania wydatków w grupie. Użytkownicy tworzą eventy (np. wyjazd, impreza, wspólne zakupy), dodają wydatki, dzielą koszty między uczestników i widzą kto komu ile jest winien. Aplikacja komunikuje się z backendem **billow_backend** przez REST API i WebSocket.
 
 ## Spis treści
 
@@ -16,12 +16,12 @@ Aplikacja mobilna **Billow** — narzędzie do wspólnego rozliczania wydatków 
 
 ## Funkcjonalności
 
-### Główna — lista eventów (`home`)
+### Główna - lista eventów (`home`)
 
 Ekran startowy z listą aktywnych eventów użytkownika. Każda karta pokazuje zdjęcie, nazwę, twórcę i liczbę uczestników. Przycisk **+** umożliwia szybkie utworzenie nowego eventu.
 
 <p align="left">
-  <img src="screens/home.png" alt="Główna — lista eventów" width="200" />
+  <img src="screens/home.png" alt="Główna - lista eventów" width="200" />
 </p>
 
 - Lista aktywnych eventów z paginacją (nieskończone przewijanie)
@@ -81,7 +81,7 @@ Profil z avatarem, danymi konta, liczbą znajomych i historią eventów (aktywne
 
 ### Podsumowanie rozliczeń (`summary`)
 
-Modal z saldem netto każdego uczestnika oraz optymalnymi przelewami — kto komu ile powinien zapłacić po rozliczeniu wszystkich wydatków.
+Modal z saldem netto każdego uczestnika oraz optymalnymi przelewami - kto komu ile powinien zapłacić po rozliczeniu wszystkich wydatków.
 
 <p align="left">
   <img src="screens/summary.png" alt="Podsumowanie rozliczeń" width="200" />
@@ -99,7 +99,7 @@ Modal z saldem netto każdego uczestnika oraz optymalnymi przelewami — kto kom
 - Sesja oparta na tokenach JWT (access + refresh)
 - Automatyczne odświeżanie tokenu przed wygaśnięciem
 - Bezpieczne przechowywanie tokenów w `expo-secure-store`
-- Ochrona tras — niezalogowany użytkownik jest przekierowywany na ekran logowania
+- Ochrona tras - niezalogowany użytkownik jest przekierowywany na ekran logowania
 
 ### Znajomi
 
@@ -206,7 +206,7 @@ billow_mobile/
 │   └── event/[id]/         # Szczegóły eventu, czat
 ├── api/                    # Klienty API (auth, events, expenses, friends, chat, media)
 ├── components/             # Komponenty UI (eventy, znajomi, modale, skeletony)
-├── context/                # AuthContext — sesja użytkownika
+├── context/                # AuthContext - sesja użytkownika
 ├── hooks/                  # Logika biznesowa (React Query + custom hooks)
 ├── providers/              # QueryProvider (TanStack Query)
 ├── types/                  # Typy TypeScript (modele API)
@@ -288,5 +288,5 @@ eas build --profile production --platform ios
 
 ## Powiązane repozytoria
 
-- **billow_backend** — API REST + WebSocket (Go)
-- **docker-compose.yml** — uruchomienie całego środowiska lokalnego
+- **billow_backend** - API REST + WebSocket (Go)
+- **docker-compose.yml** - uruchomienie całego środowiska lokalnego
